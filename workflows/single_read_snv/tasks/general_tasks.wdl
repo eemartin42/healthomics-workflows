@@ -43,7 +43,7 @@ task ExtractSampleNameFlowOrder{
         set -o pipefail
 
         bash ~{monitoring_script} | tee monitoring.log >&2 &
-
+        echo "DEBUG: input_bam is ~{input_bam}"
 
         gatk GetSampleName  \
             -I ~{input_bam} \
