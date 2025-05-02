@@ -44,6 +44,7 @@ task ExtractSampleNameFlowOrder{
 
         bash ~{monitoring_script} | tee monitoring.log >&2 &
         echo "DEBUG: input_bam is ~{input_bam}"
+        echo "DEBUG: ~{cloud_provider}"
 
         gatk GetSampleName  \
             -I ~{input_bam} \
