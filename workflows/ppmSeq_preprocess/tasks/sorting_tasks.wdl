@@ -131,7 +131,7 @@ task Demux {
     }
     output {
         File monitoring_log = "monitoring.log"
-        Int max_region_size = read_int("max_region_size.txt")
+        Int max_region_size = read_long("max_region_size.txt")
         Array[File] demux_output = glob("~{demux_output_path}/*.*")
         File? downsampling_seed = "downsampling_seed.txt"
     }
