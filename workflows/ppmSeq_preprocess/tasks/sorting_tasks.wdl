@@ -131,7 +131,7 @@ task Demux {
     }
     output {
         File monitoring_log = "monitoring.log"
-        Int max_region_size = read_long("max_region_size.txt")
+        Float max_region_size = read_string("max_region_size.txt") as Float
         Array[File] demux_output = glob("~{demux_output_path}/*.*")
         File? downsampling_seed = "downsampling_seed.txt"
     }
@@ -140,7 +140,7 @@ task Demux {
 task Sorter {
     input {
         Array[File] demux_output
-        Int max_region_size
+        Float max_region_size
         String base_file_name
         File reference_fasta
         SorterParams sorter_params
