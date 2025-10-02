@@ -108,6 +108,11 @@ The steps of the pipeline are as following:
         <i>Array[File] &mdash; Default: []</i><br />
         Input CRAM index for the tumor (in case of matched T/N calling)
 </p>
+<p name="SVPipeline.giraffe_parameters">
+        <b>SVPipeline.giraffe_parameters</b><br />
+        <i>GiraffeReferences? &mdash; Default: None</i><br />
+        vg giraffe index files to improve haplotype interpretation using population graphs
+</p>
 <p name="SVPipeline.min_indel_sc_size_to_include">
         <b>SVPipeline.min_indel_sc_size_to_include</b><br />
         <i>String? &mdash; Default: None</i><br />
@@ -122,6 +127,11 @@ The steps of the pipeline are as following:
         <b>SVPipeline.blacklist_bed</b><br />
         <i>File? &mdash; Default: None</i><br />
         Gridss blacklist file
+</p>
+<p name="SVPipeline.run_giraffe">
+        <b>SVPipeline.run_giraffe</b><br />
+        <i>Boolean &mdash; Default: None</i><br />
+        Whether to run Giraffe haplotype aware alignment or not
 </p>
 <p name="SVPipeline.prefilter_query">
         <b>SVPipeline.prefilter_query</b><br />
@@ -173,6 +183,13 @@ The steps of the pipeline are as following:
         <i>String? &mdash; Default: None</i><br />
         Cloud provider to use for the workflow. Currently supported: aws, gcp default: gcp
 </p>
+
+### Optional inputs
+<p name="SVPipeline.create_md5_checksum_outputs">
+        <b>SVPipeline.create_md5_checksum_outputs</b><br />
+        <i>Boolean </i> &mdash; 
+         Create md5 checksum for requested output files <br /> 
+</p>
 </details>
 
 
@@ -188,6 +205,11 @@ The steps of the pipeline are as following:
         <b>SVPipeline.create_assembly_memory_override</b><br />
         <i>Int? &mdash; Default: None</i><br />
          memory override for create_assembly task 
+</p>
+<p name="SVPipeline.rematching_memory_override">
+        <b>SVPipeline.rematching_memory_override</b><br />
+        <i>Int? &mdash; Default: None</i><br />
+         memory override for rematching task 
 </p>
 <p name="SVPipeline.annotate_variants_cpu_override">
         <b>SVPipeline.annotate_variants_cpu_override</b><br />
@@ -249,12 +271,12 @@ The steps of the pipeline are as following:
 </p>
 <p name="SVPipeline.realigned_assembly">
         <b>SVPipeline.realigned_assembly</b><br />
-        <i>File?</i><br />
+        <i>File</i><br />
         Assembly output after UA realingment
 </p>
 <p name="SVPipeline.realigned_assembly_index">
         <b>SVPipeline.realigned_assembly_index</b><br />
-        <i>File?</i><br />
+        <i>File</i><br />
         Assembly output index after UA realingment
 </p>
 <p name="SVPipeline.converted_vcf">
@@ -266,6 +288,11 @@ The steps of the pipeline are as following:
         <b>SVPipeline.converted_vcf_index</b><br />
         <i>File?</i><br />
         Final VCF index file in the region (non-breakend) format
+</p>
+<p name="SVPipeline.md5_checksums_json">
+        <b>SVPipeline.md5_checksums_json</b><br />
+        <i>File?</i><br />
+        json file that will contain md5 checksums for requested output files
 </p>
 
 <hr />

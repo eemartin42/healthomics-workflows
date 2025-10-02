@@ -28,9 +28,9 @@ task ExtractSampleNameFlowOrder{
         String docker
         References references
         Boolean no_address
-        String? cloud_provider_override = "gcp"
+        String cloud_provider_override = "gcp"
     }
-    String cloud_provider = select_first([cloud_provider_override, 'gcp'])
+    String cloud_provider = cloud_provider_override
 
     parameter_meta {
         input_bam: {
@@ -39,7 +39,7 @@ task ExtractSampleNameFlowOrder{
     }
 
     command <<<
-        set -e
+        set -ex
         set -o pipefail
 
         bash ~{monitoring_script} | tee monitoring.log >&2 &
@@ -48,7 +48,15 @@ task ExtractSampleNameFlowOrder{
         gatk GetSampleName  \
             -I ~{input_bam} \
             -R ~{references.ref_fasta} \
-            -O sample_name.txt
+            -O sample_name.tmp.txt
+        sort sample_name.tmp.txt | uniq > sample_name.txt
+
+        #if there is more than a single sample name, fail
+        if [[ $(wc -l < sample_name.txt) -ne 1 ]]
+        then
+            echo "Error: more than one sample name found in the input BAM file" >&2
+            exit 1
+        fi
 
         if [[ "~{cloud_provider}" == "aws" ]]
         then
@@ -293,9 +301,10 @@ task IntervalListOfGenome {
     set -e
     bash ~{monitoring_script} | tee monitoring.log >&2 &
 
-    cat ~{ref_fai} | grep -v '[ME_-]' | awk '{print $1"\t"1"\t"$2"\t+\t."}' > modifai
+    grep -v '[ME_-]' ~{ref_fai} | awk '{print $1"\t"1"\t"$2"\t+\t."}' > modifai
     cat ~{ref_dict} modifai > genome.interval_list
   >>>
+
   runtime {
     preemptible: preemptible_tries
     cpu: "1"
@@ -583,15 +592,15 @@ task ConcatHtmls {
         cat htmls_files.txt
 
         i=1
-        i=1; for file in $(cat htmls_files.txt| sed "s/,/ /g"); do cp $file $i.html ;
+        i=1; for file in $(cat htmls_files.txt| sed "s/,/ /g"); do cp "$file" "$i.html" ;
         cat $i.html >> ~{base_file_name}_aggregated.html; rm $i.html ;i=$((i + 1)) ; done
 
         ls -lstr
         echo "**************** D O N E ****************"
 
         end=$(date +%s)
-        mins_elapsed=$(( ($end - $start) / 60))
-        secs_elapsed=$(( ($end - $start) % 60 ))
+        mins_elapsed=$(( (end - start) / 60))
+        secs_elapsed=$(( (end - start) % 60 ))
         if [ $secs_elapsed -lt 10 ]; then
             secs_elapsed=0$secs_elapsed
         fi
@@ -929,7 +938,7 @@ task GetMeanCoverageFromSorterStats {
         cpu: "1"
     }
     output {
-        Int mean_coverage = read_int("~{output_file}")
+        Float mean_coverage = read_float("~{output_file}")
         File monitoring_log = "monitoring.log"
     }
   }
@@ -953,6 +962,7 @@ task CopyFiles {
         Array[File] output_files = input_files
     }
 }
+
 # creates a bed file from a VCF file and expands if needed
 task VcfToIntervalListAndBed {
     input {
@@ -998,5 +1008,129 @@ task VcfToIntervalListAndBed {
         File interval_list = "~{base_file_name}.interval_list"
         File bed = "~{base_file_name}.bed"
         File monitoring_log = "monitoring.log"
+    }
+}
+
+# creates a bed file from a VCF file and expands if needed
+task BedToIntervalList {
+    input {
+        File monitoring_script
+        File input_file
+        File reference_dict
+        String base_file_name
+        String docker
+        Int disk_size = ceil(2*size(input_file, "GB")) + 5
+        Int preemptible_tries
+        Boolean no_address
+    }
+
+    command <<< 
+        set -eo pipefail
+        bash ~{monitoring_script} | tee monitoring.log >&2 &
+
+        gatk BedToIntervalList \
+            I=~{input_file} \
+            O=~{base_file_name}.interval_list \
+            SD=~{reference_dict}
+    >>>
+
+    runtime {
+        memory: "2 GB"
+        disks: "local-disk " + disk_size + " HDD"
+        docker: docker
+        preemptible: preemptible_tries
+        noAddress: no_address
+    }
+
+    output {
+        File interval_list = "~{base_file_name}.interval_list"
+        File monitoring_log = "monitoring.log"
+    }
+}
+
+task ComputeMd5 {
+    input {
+        File input_file
+        String docker
+    }
+    Int disk_size = ceil(size(input_file, "GB")) + 1
+    String out_file = basename(input_file) + ".checksum.md5"
+    command {
+        md5sum "~{input_file}" > "~{out_file}"
+    }
+
+    output {
+        File checksum = "~{out_file}"
+    }
+
+    runtime {
+        docker: docker
+        memory: "2 GB"
+        disks: "local-disk " + disk_size + " HDD"
+    }
+}
+
+task MergeMd5sToJson {
+    parameter_meta {
+        output_json: {
+            help: "Output JSON file name containing the md5 checksums.",
+            type: "String",
+            category: "input_required"
+        }
+    }
+    input {
+        Array[File] md5_files
+        String output_json = "md5_checksums.json"
+        String docker
+    }
+    Int disk_size = ceil(size(md5_files, "GB")) + 1
+    command <<<
+        ls ~{sep=' ' md5_files} > md5_files.txt
+        python <<CODE
+import json
+import os
+md5_dict = {}
+with open("md5_files.txt") as f:
+    for line in f:
+        fname = line.strip()
+        if not fname:
+            continue
+        with open(fname) as fh:
+            line = fh.read().strip()
+            if line:
+                md5, filename = line.split()
+                md5_dict[os.path.basename(filename)] = md5
+with open("~{output_json}", "w") as out_fh:
+    json.dump(md5_dict, out_fh, indent=2)
+CODE
+    >>>
+    output {
+        File md5_json = output_json
+    }
+    runtime {
+        docker: docker
+        memory: "2 GB"
+        disks: "local-disk " + disk_size + " HDD"
+    }
+}
+
+task ConcatFiles{
+    input{
+        Array[File] files
+        String out_file_name
+        String docker
+    }
+    Int disk_size = ceil(2 * size(files,"GB") + 2)
+    command <<<
+        cat ~{sep=" " files} > ~{out_file_name}
+    >>>
+
+    runtime {
+        disks: "local-disk " + ceil(disk_size) + " HDD"
+        docker: docker
+        cpu:1
+    }
+    output{
+        File out_merged_file = "~{out_file_name}"
     }
 }

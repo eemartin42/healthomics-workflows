@@ -21,14 +21,14 @@
     },
     "SingleSampleCnmopsCNVCalling.cnv_lcr_file": {
         "description": "UG-CNV-LCR bed file",
-        "optional": false
+        "optional": true
     },
     "SingleSampleCnmopsCNVCalling.cohort_reads_count_matrix": {
         "description": "GenomicRanges object of the cohort reads count matrix in rds file format. default cohort can be found in the template. can be created by cn.mops::getReadCountsFromBAM R function ",
         "optional": false
     },
-    "SingleSampleCnmopsCNVCalling.enable_moderate_amplifications_override": {
-        "description": "whether to call moderate amplifications (Fold-Change>1.5 & < 2 will be tagged as CN2.5) Default is: False",
+    "SingleSampleCnmopsCNVCalling.enable_mod_cnv_override": {
+        "description": "whether to call moderate cnvs (Fold-Change~1.5 will be tagged as CN2.5 and Fold-Change~0.7 will be tagged as CN1.5). Default is: False",
         "optional": true
     },
     "SingleSampleCnmopsCNVCalling.genome_windows": {
@@ -101,6 +101,10 @@
     },
     "SingleSampleCnmopsCNVCalling.save_hdf_override": {
         "description": "Whether to save sample reads counts/cohort including sample/cnmops output data in hdf5 format (additionally to RDS format). Default is: False.",
+        "optional": true
+    },
+    "SingleSampleCnmopsCNVCalling.skip_figure_generation": {
+        "description": "Whether to skip figure generation. set true when using reference genome different than hg38.  Default is: False",
         "optional": true
     },
     "SingleSampleCnmopsCNVCalling.window_length": {

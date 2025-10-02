@@ -31,6 +31,10 @@
         "description": "memory override for create_assembly task",
         "optional": true
     },
+    "SVPipeline.create_md5_checksum_outputs": {
+        "description": "Create md5 checksum for requested output files",
+        "optional": true
+    },
     "SVPipeline.dummy_input_for_call_caching": {
         "description": "dummy_input_for_call_caching",
         "optional": true
@@ -41,6 +45,10 @@
     },
     "SVPipeline.germline_link_variants_memory_override": {
         "description": "memory override for germline_link_variants task",
+        "optional": true
+    },
+    "SVPipeline.giraffe_parameters": {
+        "description": "vg giraffe index files to improve haplotype interpretation using population graphs",
         "optional": true
     },
     "SVPipeline.gridss_metrics_interval": {
@@ -143,8 +151,16 @@
         "description": "Reference files: fasta, dict and fai, recommended value set in the template",
         "optional": false
     },
+    "SVPipeline.rematching_memory_override": {
+        "description": "memory override for rematching task",
+        "optional": true
+    },
     "SVPipeline.repeat_mask_file": {
         "description": "gripss paramter: Repeat mask file. Note that the default value is in template",
+        "optional": true
+    },
+    "SVPipeline.run_giraffe": {
+        "description": "Whether to run Giraffe haplotype aware alignment or not",
         "optional": true
     },
     "SVPipeline.run_ua": {

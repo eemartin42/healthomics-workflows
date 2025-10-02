@@ -32,7 +32,7 @@ import "tasks/vcf_postprocessing_tasks.wdl" as PostProcesTasks
 workflow EfficientDV {
   input {
     # Workflow args
-    String pipeline_version = "1.18.3" # !UnusedDeclaration
+    String pipeline_version = "1.23.0" # !UnusedDeclaration
     String base_file_name
 
     # Mandatory inputs
@@ -41,6 +41,9 @@ workflow EfficientDV {
     References references
 
     Boolean make_gvcf
+    Boolean recalibrate_vaf
+    Boolean is_somatic  # Enable somatic calling mode
+    Boolean show_bg_fields = is_somatic # Show background fields in the output vcf
 
     # Scatter interval list args
     Int num_shards = 40
@@ -52,6 +55,7 @@ workflow EfficientDV {
     Float min_fraction_hmer_indels = 0.12
     Float min_fraction_non_hmer_indels = 0.06
     Float min_fraction_snps = 0.12
+    Float min_fraction_single_strand_non_snps = 0.15
     Int min_read_count_snps = 2
     Int min_read_count_hmer_indels = 2
     Int min_read_count_non_hmer_indels = 2
@@ -70,6 +74,9 @@ workflow EfficientDV {
     Boolean add_ins_size_channel = true
     String? ug_make_examples_extra_args
     Boolean log_make_examples_progress = false
+    Boolean normalize_strand_bias
+    Array[Float]? strand_bias_normalization_thresholds
+
     File? germline_vcf
 
     # Background files (for somatic calling)
@@ -88,7 +95,8 @@ workflow EfficientDV {
     Int min_variant_quality_exome_hmer_indels = 20
     Int hard_qual_filter = 1
     Float? allele_frequency_ratio
-    Boolean show_bg_fields = false  # Show fields from background sample (for somatic calling)
+    Float? h_indel_vaf_to_pass
+    Float? h_indel_allele_frequency_ratio
     String ug_post_processing_extra_args = ""
 
     String dummy_input_for_call_caching = ""
@@ -110,6 +118,7 @@ workflow EfficientDV {
     Int call_variants_cpus = 8
     Int call_variants_threads = 8
     Int call_variants_uncompr_buf_size_gb = 1
+    Boolean? no_address_override
 
     # Used for running on other clouds (aws)
     String? cloud_provider_override
@@ -121,6 +130,7 @@ workflow EfficientDV {
    #@wv min_fraction_hmer_indels <= 1.1 and min_fraction_hmer_indels >= 0
    #@wv min_fraction_non_hmer_indels <= 1.1 and min_fraction_non_hmer_indels >= 0
    #@wv min_fraction_snps <= 1.1 and min_fraction_snps >= 0
+   #@wv min_fraction_single_strand_non_snps <= 1.1 and min_fraction_single_strand_non_snps >= 0
    #@mv min_read_count_snps >= 1
    #@mv min_read_count_hmer_indels >= 1
    #@mv min_read_count_non_hmer_indels >= 1
@@ -140,7 +150,9 @@ workflow EfficientDV {
    #@wv cloud_provider_override == "gcp" and len(background_cram_files) > 0 ->  suffix(background_cram_files) <= {".cram", ".bam"}
    #@wv cloud_provider_override == "gcp" and len(background_cram_files) > 0 ->  suffix(background_cram_index_files) <= {".crai", ".bai", ".csi"}
    #@wv len(optimal_coverages) == 1 + (len(background_cram_files) > 0)
-   #@wv len(background_cram_files) > 0 -> defined(allele_frequency_ratio)
+   #@wv is_somatic -> len(background_cram_files) > 0
+   #@wv is_somatic -> defined(allele_frequency_ratio)
+   
   }
   meta {
       description:"Performs variant calling on an input cram, using a re-write of (DeepVariant)[https://www.nature.com/articles/nbt.4235] which is adapted for Ultima Genomics data. There are three stages to the variant calling: (1) make_examples - Looks for “active regions” with potential candidates. Within these regions, it performs local assembly (haplotypes), re-aligns the reads, and defines candidate variant. Images of the reads in the vicinity of the candidates are saved as protos in a tfrecord format. (2) call_variants - Collects the images from make_examples and uses a deep learning model to infer the statistics of each variant (i.e. quality, genotype likelihoods etc.). (3) post_process - Uses the output of call_variants to generate a vcf and annotates it."
@@ -149,16 +161,9 @@ workflow EfficientDV {
           exclude: ["pipeline_version",
               "cloud_provider_override",
               "monitoring_script_input",
-              "no_address_override",
               "dummy_input_for_call_caching",
               "UGCallVariants.disk_size",
               "UGPostProcessing.disk_size",
-              "CreateSECBlacklist.disk_size",
-              "FilterVCF.input_model",
-              "FilterVCF.custom_annotations",
-              "FilterVCF.disk_size",
-              "FilterVCF.ref_fasta",
-              "FilterVCF.ref_fasta_idx",
               "MergeRealignedCrams.cache_tarball",
               "Globals.glob",
               "Sentieon.Globals.glob",
@@ -172,111 +177,155 @@ workflow EfficientDV {
 
   parameter_meta {
     base_file_name: {
+      type: "String",
       help: "Prefix for name of all output files",
       category: "input_required"
     }
     cram_files: {
+      type: "Array[File]",
       help: "Input cram files. Multiple files are merged.",
       category: "input_required"
     }
     cram_index_files: {
+      type: "Array[File]",
       help: "Input cram index files.",
       category: "input_required"
     }
     background_cram_files: {
+      type: "Array[File]",
       help: "Background (normal sample) cram files for somatic calling",
       category: "input_optional"
     }
     background_cram_index_files: {
+      type: "Array[File]",
       help: "Background (normal sample) cram index files for somatic calling",
       category: "input_optional"
     }
 
     references: {
+      type: "References",
       help: "Reference files: fasta, dict and fai, recommended value set in the template",
       category: "ref_required"
     }
     make_gvcf: {
+      type: "Boolean",
       help: "Whether to generate a gvcf. Default: False",
       category: "param_required"
     }
+    recalibrate_vaf: {
+      type: "Boolean",
+      help: "Whether to recalculate the variant allele frequency on the PASS variants, improves over the naive VAF calculate of DeepVariant (somatic calling only)",
+      category: "param_advanced"
+    }
+    is_somatic: {
+      help: "Enable somatic calling mode, which enables somatic-specific post-processing options",
+      category: "param_required"
+    }
     num_shards: {
+      type: "Int",
       help: "Maximal number of intervals the genome is broken into when parallelizing the make_examples step",
       category: "param_advanced"
     }
     scatter_intervals_break: {
+      type: "Int",
       help: "The length of the intervals for parallelization are multiples of scatter_intervals_break. This is also the maximal length of the intervals.",
       category: "param_optional"
     }
     target_intervals: {
+      type: "File",
       help: "Limit calling to these regions. If target_intervals and intervals_string are not provided then entire genome is used.",
       category: "param_optional"
     }
+    show_bg_fields: {
+      help: "Show background fields in the output vcf. Default: false. Mostly relevant for somatic calling.",
+      category: "param_optional"
+    }
     intervals_string: {
+      type: "String",
       help: "Regions for variant calling, in the format chrom:start-end. Multiple regions are separated by semi-colon. hese regions. Takes precedence over target_intervals. If both are not provided then entire genome is used.",
       category: "param_optional"
     }
     min_fraction_snps: {
+      type: "Float",
       help: "Minimal fraction of reads, that support a snp, required to  generate a candidate variant",
       category: "param_optional"
     }
     min_fraction_hmer_indels: {
+      type: "Float",
       help: "Minimal fraction of reads, that support an h-mer indel, required to generate a candidate variant",
       category: "param_optional"
     }
     min_fraction_non_hmer_indels: {
+      type: "Float",
       help: "Minimal fraction of reads, that support a non-h-mer indel, required to generate a candidate variant",
       category: "param_optional"
     }
+    min_fraction_single_strand_non_snps: {
+      help: "In active region detection, in case single_strand_filter is set to true, keep only non snps candidates that have at least min_fraction_single_strand_non_snps fraction",
+      category: "param_advanced"
+    }
     min_read_count_snps: {
+      type: "Int",
       help: "Minimal number of reads, that support a snp, required to  generate a candidate variant",
       category: "param_optional"
     }
     min_read_count_hmer_indels: {
+      type: "Int",
       help: "Minimal number of reads, that support an h-mer indel, required to generate a candidate variant",
       category: "param_optional"
     }
     min_read_count_non_hmer_indels: {
+      type: "Int",
       help: "Minimal number of reads, that support a non-h-mer indel, required to generate a candidate variant",
       category: "param_optional"
     }
     min_base_quality: {
+      type: "Int",
       help: "Minimal base quality for candidate generation",
       category: "param_optional"
     }
     pileup_min_mapping_quality: {
+      type: "Int",
       help: "Minimal mapping quality to be included in image (the input to the CNN)",
       category: "param_optional"
     }
     candidate_min_mapping_quality: {
+      type: "Int",
       help: "Minimal mapping quality for candidate generation",
       category: "param_optional"
     }
     max_reads_per_partition: {
+      type: "Int",
       help: "Maximal number of reads that are stored in memory when analyzing an active region",
       category: "param_optional"
     }
     dbg_min_base_quality: {
+      type: "Int",
       help: "Minimal base quality for local assembly of haplotypes",
       category: "param_optional"
     }
     prioritize_alt_supporting_reads: {
+      type: "Boolean",
       help: "Generate an image with all available alt-supporting reads, and only then add non-supporting reads",
       category: "param_optional"
     }
     p_error: {
+      type: "Float",
       help: "Basecalling error for reference confidence model in gvcf",
       category: "param_optional"
     }
     optimal_coverages: {
+      type: "Array[Int]",
       help: "Each sample is downsampled to the \"optimal coverage\" (dictated by the coverage of the training set). Downsampling method is determined by cap_at_optimal_coverage.",
       category: "param_advanced"
     }
     cap_at_optimal_coverage: {
+      type: "Boolean",
       help: "Defines downsampling behavior. When false, then the reads are downsampled such that the average coverage equals \"optimal coverage\". When true, each position is downsampled to \"optimal coverage\".",
       category: "param_advanced"
     }
     output_realignment: {
+      type: "Boolean",
       help: "Output haplotypes and re-aligned reads to a bam file. Default: false.",
       category: "param_optional"
     }
@@ -285,6 +334,16 @@ workflow EfficientDV {
       help: "Whether to filter out non snp candidates that are on a single strand. Reduces the number of candidates and hence the cost. Most useful for somatic calling.",
       category: "param_advanced"
     }
+    normalize_strand_bias: {
+      type: "Boolean",
+      help: "Whether to normalize the strand bias in the images. This is useful for WES calling, where target enrichment may introduce strand bias between alleles.",
+      category: "param_advanced"
+    }
+    strand_bias_normalization_thresholds: {
+      type: "Array[Float]",
+      help: "Thresholds for strand bias normalization. The first value is the lowest strand bias (further from 1:1) to normalize, the second value is the highest strand bias (closest to 1:1) to normalize",
+      category: "param_advanced"
+    } 
     keep_duplicates : {
       type: "Boolean",
       help: "Keep duplicated reads in the images. Do not use in high depth samples (e.g. WES).",
@@ -337,16 +396,22 @@ workflow EfficientDV {
     }
     allele_frequency_ratio: {
         type: "Float",
-        help: "Minimal ratio between the allele frequency in tumor and normal, for vcf filtering",
+        help: "Minimal ratio between the allele frequency in tumor and normal for non h indels and snvs, for vcf filtering",
+        category: "param_optional"
+    }
+    h_indel_vaf_to_pass: {
+        type: "Float",
+        help: "Minimal variant allele frequency for h-indels to not filter out by allele frequency ratio",
+        category: "param_optional"
+    }
+    h_indel_allele_frequency_ratio: {
+        type: "Float",
+        help: "Minimal ratio between the allele frequency in tumor and normal for h-indels for vcf filtering",
         category: "param_optional"
     }
     hard_qual_filter: {
         help: "Any variant with QUAL < hard_qual_filter will be discarded from the VCF file",
         category: "param_optional"
-    }
-    show_bg_fields: {
-      help: "Show background statistics BG_AD, BG_SB in the output VCF (relevant for somatic calling)",
-      category: "param_optional"
     }
     input_flow_order: {
       help: "Flow order. If not provided, it will be extracted from the CRAM header",
@@ -382,6 +447,10 @@ workflow EfficientDV {
     }
     preemptible_tries: {
       help: "Number of preemptible tries",
+      category: "param_advanced"
+    }
+    no_address_override: {
+      help: "Whether to disable assigning external IP addresses to VMs (relevant for Google)",
       category: "param_advanced"
     }
     call_variants_uncompr_buf_size_gb: {
@@ -487,6 +556,7 @@ workflow EfficientDV {
   String cloud_provider = select_first([cloud_provider_override, 'gcp'])
   Float ug_make_examples_memory = select_first([ug_make_examples_memory_override, 4])
   Int ug_make_examples_cpus = select_first([ug_make_examples_cpus_override, 2])
+  Boolean no_address = select_first([no_address_override, true])
 
   call Globals.Globals as Globals
   GlobalVariables global = Globals.global_dockers
@@ -501,7 +571,7 @@ workflow EfficientDV {
         preemptible_tries = preemptible_tries,
         docker = global.ubuntu_docker,
         monitoring_script = monitoring_script,
-        no_address = true
+        no_address = no_address
     }
   }
 
@@ -515,7 +585,7 @@ workflow EfficientDV {
         preemptible_tries = preemptible_tries,
         docker = global.ubuntu_docker,
         monitoring_script = monitoring_script,
-        no_address = true
+        no_address = no_address
     }
   }
 
@@ -527,7 +597,7 @@ workflow EfficientDV {
       input:
         interval_list = interval_list,
         docker = global.ubuntu_docker,
-        no_address = true,
+        no_address = no_address,
         monitoring_script = monitoring_script
     }
 
@@ -535,7 +605,7 @@ workflow EfficientDV {
       input:
         fasta_index = references.ref_fasta_index,
         docker = global.ubuntu_docker,
-        no_address = true,
+        no_address = no_address,
         monitoring_script = monitoring_script
   }
 
@@ -546,7 +616,7 @@ workflow EfficientDV {
       break_bands_at_multiples_of = scatter_intervals_break,
       dummy_input_for_call_caching = dummy_input_for_call_caching,
       docker = global.broad_gatk_docker,
-      no_address = true,
+      no_address = no_address,
       monitoring_script = monitoring_script
   }
 
@@ -556,6 +626,7 @@ workflow EfficientDV {
         interval = interval,
         total_number_of_shards = ScatterIntervalList.interval_count,
         overall_calling_regions_length = CallingIntervalsLength.interval_list_length,
+        is_somatic = is_somatic,
         genome_length = GenomeSize.fasta_length,
         references = references,
         cram_files = cram_files,
@@ -577,10 +648,13 @@ workflow EfficientDV {
         make_gvcf = make_gvcf,
         p_error = p_error,
         single_strand_filter = single_strand_filter,
+        min_fraction_single_strand_non_snps = min_fraction_single_strand_non_snps,
         keep_duplicates = keep_duplicates,
         add_ins_size_channel = add_ins_size_channel,
         extra_args = ug_make_examples_extra_args,
         prioritize_alt_supporting_reads = prioritize_alt_supporting_reads,
+        normalize_strand_bias = normalize_strand_bias,
+        strand_bias_normalization_thresholds = strand_bias_normalization_thresholds,
         log_progress = log_make_examples_progress,
         docker = global.ug_make_examples_docker,
         optimal_coverages = optimal_coverages,
@@ -590,7 +664,8 @@ workflow EfficientDV {
         preemptible_tries = preemptible_tries,
         memory = ug_make_examples_memory,
         cpu = ug_make_examples_cpus,
-        cloud_provider = cloud_provider
+        cloud_provider = cloud_provider,
+        no_address = no_address
     }
   }
 
@@ -609,6 +684,7 @@ workflow EfficientDV {
       num_threads = call_variants_threads,
       monitoring_script = monitoring_script,
       call_variants_extra_mem = ug_call_variants_extra_mem,
+      no_address = no_address
   }
 
   if (make_gvcf){
@@ -629,12 +705,22 @@ workflow EfficientDV {
   }
 
   String flow_order_ = select_first([input_flow_order, ExtractSampleNameFlowOrder.flow_order])
-
+  Array[File] cram_files_for_post_processing = if recalibrate_vaf then cram_files else []
+  Array[File] cram_index_files_for_post_processing = if recalibrate_vaf then cram_index_files else []
+  Array[File] background_cram_files_for_post_processing = if  recalibrate_vaf then background_cram_files else []
+  Array[File] background_cram_index_files_for_post_processing = if recalibrate_vaf then background_cram_index_files else []
+  
   call UGDVTasks.UGPostProcessing {
     input:
       called_records = UGCallVariants.output_records,
+      cram_files = cram_files_for_post_processing,
+      cram_index_files = cram_index_files_for_post_processing,
+      background_cram_files = background_cram_files_for_post_processing,
+      background_cram_index_files = background_cram_index_files_for_post_processing,
       gvcf_records = gvcf_records,
       make_gvcf    = make_gvcf,
+      recalibrate_vaf = recalibrate_vaf,
+      is_somatic = is_somatic,
       ref = references.ref_fasta,
       ref_index = references.ref_fasta_index,
       flow_order = flow_order_,
@@ -651,7 +737,8 @@ workflow EfficientDV {
       dbsnp = ref_dbsnp,
       dbsnp_index = ref_dbsnp_index,
       extra_args = ug_post_processing_extra_args,
-      monitoring_script = monitoring_script
+      monitoring_script = monitoring_script,
+      no_address = no_address
   }
 
   if (output_realignment){
@@ -663,7 +750,7 @@ workflow EfficientDV {
         sample_name = "realigned",
         references = references,
         docker = global.broad_gatk_docker,
-        no_address = true,
+        no_address = no_address,
         cpus = 4,
         preemptible_tries = preemptible_tries
     }
@@ -681,9 +768,12 @@ workflow EfficientDV {
       input:
           input_vcf = raw_output_vcf,
           af_ratio = select_first([allele_frequency_ratio]),
+          h_indel_vaf_to_pass = h_indel_vaf_to_pass,
+          h_indel_vaf_ratio_to_pass = h_indel_allele_frequency_ratio,
           final_vcf_base_name = base_file_name,
           monitoring_script = monitoring_script,
-          bcftools_docker =  global.bcftools_docker
+          ugbio_filtering_docker =  global.ugbio_filtering_docker,
+          no_address = no_address
     } 
   }
 
@@ -692,7 +782,8 @@ workflow EfficientDV {
           input_vcf = select_first([ApplyAlleleFrequencyRatioFilter.output_vcf, raw_output_vcf]),
           final_vcf_base_name = base_file_name,
           monitoring_script = monitoring_script,
-          bcftools_docker =  global.bcftools_docker
+          bcftools_docker =  global.bcftools_docker,
+          no_address = no_address
   }
 
   if (make_gvcf) {
@@ -709,7 +800,8 @@ workflow EfficientDV {
       output_prefix = output_prefix,
       ref = references.ref_fasta,
       docker = global.ug_make_examples_docker,
-      monitoring_script = monitoring_script
+      monitoring_script = monitoring_script,
+      no_address = no_address
   }
 
   if (output_realignment) {

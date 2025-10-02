@@ -20,7 +20,7 @@ task ApplyQualFilters {
   command <<<
     bash ~{monitoring_script} | tee monitoring.log >&2 &
 
-    set -eo pipefail
+    set -xeo pipefail
 
     java -XX:GCTimeLimit=50 -XX:GCHeapFreeLimit=10 -Xms10000m \
     -jar ~{gitc_path}/GATK_ultima.jar VariantFiltration \
@@ -54,26 +54,31 @@ task ApplyAlleleFrequencyRatioFilter {
   input{
     File input_vcf
     Float af_ratio
+    Float? h_indel_vaf_to_pass
+    Float? h_indel_vaf_ratio_to_pass
     String final_vcf_base_name
     File monitoring_script
-    String bcftools_docker
+    String ugbio_filtering_docker
+    Boolean no_address = true
   }
   Int disk_size = ceil(3 * size(input_vcf, "GB") + 1 )
   String output_file = "~{final_vcf_base_name}.annotated.filt.afRatio.vcf.gz"
-  String tmp_file = "~{final_vcf_base_name}.tmp.vcf.gz"
   command <<<
     bash ~{monitoring_script} | tee monitoring.log >&2 &
  
-    set -eo pipefail
- 
-    bcftools filter ~{input_vcf} -e 'FILTER!="RefCall" && (VARIANT_TYPE="snp" || VARIANT_TYPE="non-h-indel") && (AD[0:1]/DP)/(BG_AD[0:1]/BG_DP) < ~{af_ratio}' -s "LowAFRatioToBackground" -m "+" -Oz -o  ~{output_file}
-    bcftools index -t ~{output_file}
+    set -xeo pipefail
+    filter_low_af_ratio_to_background --af_ratio_threshold ~{af_ratio} \
+                                      --new_filter "LowAFRatioToBackground"  \
+                                      ~{"--af_ratio_threshold_h_indels " + h_indel_vaf_ratio_to_pass} \
+                                      ~{"--tumor_vaf_threshold_h_indels " + h_indel_vaf_to_pass} \
+                                      ~{input_vcf} ~{output_file}
+    
    >>>
   runtime {
     memory: "4 GB"
     disks: "local-disk " + ceil(disk_size) + " HDD"
-    docker: bcftools_docker
-    noAddress: true
+    docker: ugbio_filtering_docker
+    noAddress: no_address
     maxRetries: 1
   }
    output {
@@ -89,6 +94,7 @@ task RemoveRefCalls {
     String final_vcf_base_name
     File monitoring_script
     String bcftools_docker
+    Boolean no_address = true
   }
   Int disk_size = ceil(3 * size(input_vcf, "GB") + 1 )
   String output_file = "~{final_vcf_base_name}.annotated.filt.vcf.gz"
@@ -96,7 +102,7 @@ task RemoveRefCalls {
   command <<<
     bash ~{monitoring_script} | tee monitoring.log >&2 &
 
-    set -eo pipefail
+    set -xeo pipefail
 
     bcftools view -i 'FILTER!="RefCall"' ~{input_vcf} -Oz -o ~{output_file}
     bcftools index -t ~{output_file}
@@ -106,7 +112,7 @@ task RemoveRefCalls {
     memory: "4 GB"
     disks: "local-disk " + ceil(disk_size) + " HDD"
     docker: bcftools_docker
-    noAddress: true
+    noAddress: no_address
     maxRetries: 1
   }
    output {
@@ -133,7 +139,7 @@ task CalibrateBridgingSnvs {
       bash ~{monitoring_script} | tee monitoring.log >&2 &
       source ~/.bashrc
       conda activate genomics.py3
-      set -eo pipefail
+      set -xeo pipefail
       
       python /VariantCalling/ugvc calibrate_bridging_snvs \
       --vcf ~{input_vcf} \

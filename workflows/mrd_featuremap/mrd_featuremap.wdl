@@ -34,12 +34,13 @@ import "tasks/globals.wdl" as Globals
 
 workflow MRDFeatureMap {
     input {
-        String pipeline_version = "1.18.3" # !UnusedDeclaration
+        String pipeline_version = "1.23.0" # !UnusedDeclaration
         String base_file_name
         # Outputs from single_read_snv.wdl (cfDNA sample)
         File cfdna_featuremap
         File cfdna_featuremap_index
         File featuremap_df_file
+        File srsnv_metadata_json
         # for coverage collection with gatk DepthOfCoverage (cfDNA sample)
         File cfdna_cram_bam
         File cfdna_cram_bam_index
@@ -51,6 +52,8 @@ workflow MRDFeatureMap {
         String? bcftools_extra_args
         Array[File] include_regions
         Array[File] exclude_regions
+        # diluent germline vcfs
+        Array[File]? diluent_germline_vcfs
         # final-analysis-level filters
         MrdAnalysisParams mrd_analysis_params
         # for generating db control signatures
@@ -66,6 +69,8 @@ workflow MRDFeatureMap {
         # Used for running on other clouds (aws)
         String? cloud_provider_override
         File? monitoring_script_input
+
+        Boolean create_md5_checksum_outputs = false
 
         # When running on Terra, use workspace.name as this input to ensure that all tasks will only cache hit to runs in your
         # own workspace. This will prevent call caching from failing with "Cache Miss (10 failed copy attempts)". Outside of
@@ -90,14 +95,15 @@ workflow MRDFeatureMap {
         #@wv prefix(references['ref_fasta_index']) == references['ref_fasta']
 
         # input suffixes
-        #@wv prefix(cfdna_cram_bam_index) == cfdna_cram_bam
+        #@wv prefix(basename(cfdna_cram_bam_index)) == basename(cfdna_cram_bam)
         #@wv suffix(cfdna_cram_bam) in {'.bam', '.cram'}
         #@wv suffix(cfdna_cram_bam_index) in {'.bai', '.crai'}
         #@wv suffix(include_regions) <= {'.bed', '.gz'}
-        #@wv suffix(exclude_regions) <= {'.bed', '.gz', '.vcf'}
+        #@wv suffix(exclude_regions) <= {'.bed', '.gz', '.vcf', '.vcf.gz'}
         #@wv suffix(snv_database) in {'.gz'}
-        #@wv suffix(prefix(snv_database)) in {'.vcf'}
+        #@wv suffix(prefix(snv_database)) in {'.vcf', '.vcf.gz'}
         #@wv suffix(featuremap_df_file) in {'.parquet'}
+        ##@wv defined(diluent_germline_vcfs) and len(diluent_germline_vcfs)>0 -> suffix(diluent_germline_vcfs) <= {'.vcf', '.vcf.gz'}
     }
 
   meta {
@@ -114,7 +120,12 @@ workflow MRDFeatureMap {
           "Sentieon.Globals.glob",
           "AnnotateVCF.Globals.glob",
           "SingleSampleQC.Globals.glob",
-          "VariantCallingEvaluation.Globals.glob"
+          "VariantCallingEvaluation.Globals.glob",
+          "MergeVcfsIntoBed.disk_size",
+          "PadDiluentVcf.disk_size",
+          "PadDiluentVcf.memory_gb",
+          "PadDiluentVcf.cpus",
+          "MergeMd5sToJson.output_json"
       ]}
   }    
 
@@ -139,6 +150,11 @@ workflow MRDFeatureMap {
           type: "File",
           category: "input_required"
       }
+      srsnv_metadata_json: {
+          help: "Metadata json file output by the SingleReadSNV pipeline",
+          type: "File",
+          category: "input_required"
+      }
       cfdna_cram_bam: {
           help: "CRAM or BAM file of cfDNA sample, must be equal to the input used for the SingleReadSNV pipeline that generated cfdna_featuremap",
           type: "File",
@@ -150,7 +166,7 @@ workflow MRDFeatureMap {
           category: "input_required"
       }
       mapping_quality_threshold: {
-          help: "Mapping quality threshold for reads to be included in the coverage analysis, corresponding to the value used to filter the srsnv output",
+          help: "Mapping quality threshold for reads to be included in the coverage analysis, default 0 as srsnv mapq filtering is included in srsnv_metadata_json",
           type: "Int",
           category: "input_required"
       }
@@ -179,6 +195,11 @@ workflow MRDFeatureMap {
           type: "Array[File]",
           category: "ref_optional"
       }
+      diluent_germline_vcfs: {
+          help: "Optional germline VCF files from diluent samples to pad and exclude from analysis",
+          type: "Array[File]",
+          category: "input_optional"
+      }
       mrd_analysis_params: {
           help: "Parameters for the MRD analysis",
           type: "MrdAnalysisParams",
@@ -194,11 +215,16 @@ workflow MRDFeatureMap {
           type: "Int",
           category: "input_optional"
       }
-        memory_extract_coverage_override: {
+      memory_extract_coverage_override: {
             help: "Memory in GB to use for the coverage extraction task",
             type: "Int",
             category: "input_optional"
-        }
+      }
+      create_md5_checksum_outputs: {
+           help: "Create md5 checksum for requested output files",
+           type: "Boolean",
+           category: "input_optional"
+      }
       references: {
           help: "Reference files: fasta, dict and fai, recommended value set in the template",
           type: "References",
@@ -259,42 +285,21 @@ workflow MRDFeatureMap {
           type: "Array[File]",
           category: "output"
       }
-      coverage_per_locus_csv: {
-          help: "CSV file of the coverage per locus across all signatures",
-          type: "File",
-          category: "output"
+      coverage_bed: {
+        help: "Coverage bed file",
+        type: "File",
+        category: "output"
       }
-      sample_summary: {
-          help: "Summary file of the coverage per sample",
-          type: "File",
-          category: "output"
+      coverage_bed_index: {
+        help: "Respective index",
+        type: "File",
+        category: "output"
       }
-      sample_statistics: {
-          help: "Statistics file of the coverage per sample",
-          type: "File",
-          category: "output"
-      }
-      sample_interval_summary: {
-          help: "Summary file of the coverage per interval",
-          type: "File",
-          category: "output"
-      }
-      sample_interval_statistics: {
-          help: "Statistics file of the coverage per interval",
-          type: "File",
-          category: "output"
-      }
-      sample_cumulative_coverage_proportions: {
-          help: "Cumulative coverage proportions file of the coverage per sample",
-          type: "File",
-          category: "output"
-      }
-      sample_cumulative_coverage_counts: {
-          help: "Cumulative coverage counts file of the coverage per sample",
-          type: "File",
-          category: "output"
-      }
-      
+      md5_checksums_json: {
+        help: "json file that will contain md5 checksums for requested output files",
+        type: "File",
+        category: "output"
+    }
   }
 
   Int preemptibles = select_first([preemptible_tries, 1])
@@ -305,11 +310,30 @@ workflow MRDFeatureMap {
   Boolean defined_external_matched_signatures = defined(external_matched_signatures)
   Boolean defined_external_control_signatures = defined(external_control_signatures)
   Boolean defined_somatic_snv_database = defined(snv_database) && (select_first([n_synthetic_signatures]) > 0)
+  Boolean defined_diluent_germline_vcfs = defined(diluent_germline_vcfs)
   File monitoring_script = select_first([monitoring_script_input, global.monitoring_script])
 
   # Part 1 - Filter signatures
+  # Process diluent germline VCFs if provided
+  if (defined_diluent_germline_vcfs) {
+    Array[File] diluent_vcfs = select_first([diluent_germline_vcfs])
+    scatter (vcf_path in diluent_vcfs) {
+      call UGMrdTasks.PadVcf as PadDiluentVcf {
+        input:
+          input_vcf = vcf_path,
+          ref_fai = references.ref_fasta_index,
+          pad_size = 2,
+          docker = global.ugbio_core_docker,
+          preemptible_tries = preemptibles,
+          monitoring_script = monitoring_script
+      }
+    }
+  }
+
   if (defined_external_matched_signatures) {
     Array[File] all_matched_signatures = select_first([external_matched_signatures,])
+    Array[Array[File]] matched_exclude_regions_array = select_all([exclude_regions, PadDiluentVcf.padded_bed])
+    Array[File] matched_exclude_regions = flatten(matched_exclude_regions_array)
     # Filter the matched signatures over the genomic regions bed file + apply filters
     scatter (i in range(length(all_matched_signatures))) {
       call UGGeneralTasks.FilterVcfWithBcftools as FilterMatched {
@@ -317,7 +341,7 @@ workflow MRDFeatureMap {
           input_vcf = all_matched_signatures[i],
           docker = global.bcftools_docker,
           bcftools_extra_args = bcftools_extra_args,  
-          exclude_regions = exclude_regions,
+          exclude_regions = matched_exclude_regions,
           include_regions = include_regions,
           preemptible_tries = preemptibles,
           monitoring_script = monitoring_script, #!FileCoercion
@@ -326,7 +350,7 @@ workflow MRDFeatureMap {
   }  
   
   # for the external and db controls, exclude the regions from the matched signatures
-  Array[Array[File]] control_exclude_regions_array = select_all([exclude_regions, external_matched_signatures])
+  Array[Array[File]] control_exclude_regions_array = select_all([exclude_regions, external_matched_signatures, PadDiluentVcf.padded_bed])
   Array[File] control_exclude_regions = flatten(control_exclude_regions_array) 
   if (defined_external_control_signatures) {
     Array[File] external_control_signatures_array = select_first([external_control_signatures,])
@@ -381,15 +405,27 @@ workflow MRDFeatureMap {
   # Part 2 - Collect coverage over signatures
   Array[File] all_vcf_files = flatten(select_all([filtered_matched_control_signatures, filtered_external_control_signatures, filtered_db_control_signatures]))
   Int memory_extract_coverage = select_first([memory_extract_coverage_override, 8])
-  call UGMrdTasks.ExtractCoverageOverVcfFiles as ExtractCoverageOverVcfFiles{
+
+  call UGMrdTasks.MergeVcfsIntoBed as MergeVcfsIntoBed {
     input:
       vcf_files = all_vcf_files,
+      docker = global.ugbio_core_docker,
+      disk_size = ceil(size(all_vcf_files, "GB") * 2 + 20),
+      memory_gb = memory_extract_coverage,
+      cpus = 2,
+      preemptibles = preemptibles,
+      monitoring_script = monitoring_script #!FileCoercion
+  }
+
+  call UGMrdTasks.ExtractCoverageOverVcfFiles as ExtractCoverageOverVcfFiles{
+    input:
+      merged_loci_bed = MergeVcfsIntoBed.merged_loci_bed,
       input_cram_bam = cfdna_cram_bam,
       input_cram_bam_index = cfdna_cram_bam_index,
       base_file_name = base_file_name,
       mapping_quality_threshold = mapping_quality_threshold,
       references = references,
-      docker = global.ugbio_mrd_docker,
+      docker = global.mosdepth_docker,
       memory_gb = memory_extract_coverage,
       cpus = 2,
       preemptibles = preemptibles,
@@ -398,17 +434,26 @@ workflow MRDFeatureMap {
 
   # Part 3 - Intersect FeatureMap with signatures
   Float featuremap_size = size(cfdna_featuremap, "GB")
+  Int tmp_cpus_FeatureMapIntersectWithSignatures = round(length(all_vcf_files) / 2)
+  Int cpus_FeatureMapIntersectWithSignatures = if tmp_cpus_FeatureMapIntersectWithSignatures < 2 then 2 else tmp_cpus_FeatureMapIntersectWithSignatures
+  Int tmp_memory_FeatureMapIntersectWithSignatures = cpus_FeatureMapIntersectWithSignatures * 2
+  Int memory_FeatureMapIntersectWithSignatures = if tmp_memory_FeatureMapIntersectWithSignatures < 4 then 4 else tmp_memory_FeatureMapIntersectWithSignatures
   call UGMrdTasks.FeatureMapIntersectWithSignatures as FeatureMapIntersectWithSignatures{
     input:
       featuremap = cfdna_featuremap,
       featuremap_index = cfdna_featuremap_index,
       matched_signatures = FilterMatched.output_vcf,
+      matched_signatures_indexes = FilterMatched.output_vcf_index,
       control_signatures = FilterControlSignatures.output_vcf,
+      control_signatures_indexes = FilterControlSignatures.output_vcf_index,
       db_signatures = GenerateControlSignaturesFromDatabase.db_signatures,
+      matched_signatures_indices = FilterMatched.output_vcf_index,
+      control_signatures_indices = FilterControlSignatures.output_vcf_index,
+      db_signatures_indices = GenerateControlSignaturesFromDatabase.db_signatures_indices,
       docker = global.ugbio_mrd_docker,
       disk_size = 2 * featuremap_size + 30,
-      memory_gb = 8,
-      cpus = 2,
+      memory_gb = memory_FeatureMapIntersectWithSignatures,
+      cpus = cpus_FeatureMapIntersectWithSignatures,
       monitoring_script = monitoring_script  #!FileCoercion
   }
 
@@ -419,10 +464,11 @@ workflow MRDFeatureMap {
       matched_signatures_vcf = filtered_matched_control_signatures,
       control_signatures_vcf = filtered_external_control_signatures,
       db_signatures_vcf = filtered_db_control_signatures,
-      coverage_csv = ExtractCoverageOverVcfFiles.coverage_per_locus_csv,
+      coverage_bed = ExtractCoverageOverVcfFiles.coverage_bed,
       mrd_analysis_params = mrd_analysis_params,
       basename = base_file_name,
       featuremap_df_file = featuremap_df_file,
+      srsnv_metadata_json = srsnv_metadata_json,
       docker = global.ugbio_mrd_docker,
       disk_size = 3 * featuremap_size + 30,
       memory_gb = memory_extract_coverage,
@@ -430,12 +476,40 @@ workflow MRDFeatureMap {
       monitoring_script = monitoring_script  #!FileCoercion
   }
 
+    File features_dataframe_ = MrdDataAnalysis.features
+    File signatures_dataframe_ = MrdDataAnalysis.signatures
+    File report_html_ = MrdDataAnalysis.mrd_analysis_html
+    File tumor_fraction_h5_ = MrdDataAnalysis.tumor_fraction_h5
+
+    if (create_md5_checksum_outputs) {
+
+        Array[File] output_files = select_all(flatten([
+                                                      select_first([[features_dataframe_], []]),
+                                                      select_first([[signatures_dataframe_], []]),
+                                                      select_first([[report_html_], []]),
+                                                      select_first([[tumor_fraction_h5_], []]),
+                                                      ]))
+
+        scatter (file in output_files) {
+            call UGGeneralTasks.ComputeMd5 as compute_md5 {
+                input:
+                    input_file = file,
+                    docker = global.ubuntu_docker,
+            }
+        }
+
+        call UGGeneralTasks.MergeMd5sToJson {
+            input:
+                md5_files = compute_md5.checksum,
+                docker = global.ugbio_core_docker
+        }
+    }
   output {
     # MRD analysis results
-    File features_dataframe = MrdDataAnalysis.features
-    File signatures_dataframe = MrdDataAnalysis.signatures
-    File report_html = MrdDataAnalysis.mrd_analysis_html
-    File tumor_fraction_h5 = MrdDataAnalysis.tumor_fraction_h5
+    File features_dataframe = features_dataframe_
+    File signatures_dataframe = signatures_dataframe_
+    File report_html = report_html_
+    File tumor_fraction_h5 = tumor_fraction_h5_
     # Intersected featuremaps
     Array[File] intersected_featuremaps_parquet = FeatureMapIntersectWithSignatures.intersected_featuremaps_parquet
     Array[File] intersected_featuremaps = FeatureMapIntersectWithSignatures.intersected_featuremaps
@@ -445,12 +519,9 @@ workflow MRDFeatureMap {
     Array[File]? matched_signatures_vcf = filtered_matched_control_signatures
     Array[File]? db_signatures_vcf = filtered_db_control_signatures
     # Coverage stats
-    File coverage_per_locus_csv = ExtractCoverageOverVcfFiles.coverage_per_locus_csv
-    File sample_summary = ExtractCoverageOverVcfFiles.sample_summary
-    File sample_statistics = ExtractCoverageOverVcfFiles.sample_statistics
-    File sample_interval_summary = ExtractCoverageOverVcfFiles.sample_interval_summary
-    File sample_interval_statistics = ExtractCoverageOverVcfFiles.sample_interval_statistics
-    File sample_cumulative_coverage_proportions = ExtractCoverageOverVcfFiles.sample_cumulative_coverage_proportions
-    File sample_cumulative_coverage_counts = ExtractCoverageOverVcfFiles.sample_cumulative_coverage_counts    
+    File coverage_bed = ExtractCoverageOverVcfFiles.coverage_bed
+    File coverage_bed_index = ExtractCoverageOverVcfFiles.coverage_bed_index
+
+    File? md5_checksums_json = MergeMd5sToJson.md5_json
   }
 }

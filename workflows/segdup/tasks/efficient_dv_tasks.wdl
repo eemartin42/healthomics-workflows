@@ -1,9 +1,7 @@
 version 1.0
 import "structs.wdl" as Structs
-
-
 task UGMakeExamples{
-  input {
+  input{
     Array[File] cram_files
     Array[File] cram_index_files
     File interval
@@ -26,6 +24,7 @@ task UGMakeExamples{
     Float min_fraction_snps
     Float min_fraction_hmer_indels
     Float min_fraction_non_hmer_indels
+    Float min_fraction_single_strand_non_snps
     Int candidate_min_mapping_quality
     Int max_reads_per_partition
     Int assembly_min_base_quality
@@ -34,6 +33,7 @@ task UGMakeExamples{
     Boolean prioritize_alt_supporting_reads    
     Array[Int] optimal_coverages
     Boolean cap_at_optimal_coverage
+    Boolean is_somatic
     Boolean output_realignment = false
     Boolean single_strand_filter = false
     Boolean keep_duplicates = true
@@ -41,6 +41,8 @@ task UGMakeExamples{
     String? extra_args
     Boolean log_progress = false
     Boolean count_candidates_with_dvtools = false
+    Boolean normalize_strand_bias = false
+    Array[Float]? strand_bias_normalization_thresholds
 
     String docker
     File monitoring_script
@@ -48,6 +50,7 @@ task UGMakeExamples{
     Int cpu
     Int preemptible_tries
     String cloud_provider
+    Boolean no_address = true
   }
   # Estimate output_size that fits candidate generated parameters (assuming constant image size)
   #   More sensitive thresholds (such as used for somatic variant detection) yield more examples (images)
@@ -92,6 +95,7 @@ task UGMakeExamples{
   String output_prefix = basename(interval, ".interval_list")
   Boolean defined_background = length(background_cram_files) > 0
 
+  Array[Float] strand_bias_normalization_thresholds_defined = select_first([strand_bias_normalization_thresholds, [0.5,0.5]])
 
   parameter_meta {
       cram_files: {
@@ -159,7 +163,7 @@ task UGMakeExamples{
     touch background.cram.crai
 
     # Process interval file
-    cat ~{interval} | grep -v @ | awk 'BEGIN{OFS="\t"}{print $1,$2-1,$3}' >> interval.bed
+    grep -v @ ~{interval} | awk 'BEGIN{OFS="\t"}{print $1,$2-1,$3}' >> interval.bed
 
     # split the interval file into parts for parallel processing (number of parts as number of cpus)
     echo 'splitting interval into ~{cpu} parts'
@@ -179,10 +183,13 @@ task UGMakeExamples{
       echo -n "interval size is: "
       awk '{sum += $3 - $2} END {print sum}' "$file"
     done
+    
+    #shellcheck disable=SC2034
+    st_bias_norm_thresholds_string="--strand-bias-threshold-to-normalize ~{sep=',' strand_bias_normalization_thresholds_defined}"
 
     # parallel processing: run the tool in different process, each on a different interval part
     pids=()
-    for interval_part in $(ls interval_*.bed | sort); do
+    for interval_part in $(find . -name "interval_*.bed" | sort); do
       part_number=$(echo "$interval_part" | grep -o -E '[0-9]+') #extract the part number from the file name
       tool \
         --input "$input_string" \
@@ -198,15 +205,18 @@ task UGMakeExamples{
         --cgp-min-fraction-snps ~{min_fraction_snps} \
         --cgp-min-fraction-hmer-indels ~{min_fraction_hmer_indels} \
         --cgp-min-fraction-non-hmer-indels ~{min_fraction_non_hmer_indels} \
+        --cgp-min-fraction-single-strand-non-snps ~{min_fraction_single_strand_non_snps} \
         --cgp-min-mapping-quality ~{candidate_min_mapping_quality} \
         --max-reads-per-region ~{max_reads_per_partition} \
         --assembly-min-base-quality ~{assembly_min_base_quality} \
         ~{true="--realigned-sam" false="" output_realignment} \
-        ~{true="--somatic" false="" defined_background} \
+        ~{true="--somatic" false="" is_somatic} \
         ~{if make_gvcf then "--gvcf  --p-error ~{p_error}" else ""} \
         --optimal-coverages "~{sep=";" optimal_coverages}" \
         ~{true="--cap-at-optimal-coverage " false="" cap_at_optimal_coverage} \
         ~{true="--prioritize-alt-supporting-reads " false="" prioritize_alt_supporting_reads} \
+        ~{true="--normalize-strand-bias" false="" normalize_strand_bias} \
+        ~{true="$st_bias_norm_thresholds_string" false="" normalize_strand_bias } \
         --cycle-examples-min 100000 \
         --prefix-logging-with "${part_number}>> " \
         ~{true="--single-strand-filter" false="" single_strand_filter} \
@@ -223,10 +233,10 @@ task UGMakeExamples{
 
   # Wait for the process running the tool to finish (don't wait for the process running the monitor log)
   # if one process is failed, kill all the other processes and exit with error
-  for pid in ${pids[*]}; do
+  for pid in "${pids[@]}"; do
     if ! wait "$pid"; then
       echo "ERROR occurred. View error using: *** for prefix in \"00>>\" \"01>>\"; do cat log | grep \"^\$prefix\" | tail; done; *** Killing all other processes and exiting."
-      for other_pid in ${pids[*]}; do
+      for other_pid in "${pids[@]}"; do
         if [ "$other_pid" != "$pid" ]; then
           kill "$other_pid"
         fi
@@ -235,26 +245,26 @@ task UGMakeExamples{
     fi
   done
 
-    if [ ~{output_realignment} == "true" ]
-    then
+  if [ ~{output_realignment} == "true" ]
+  then
       # concat the output ~{output_prefix}_hap_out.sam files into one (using samtools)
       samtools cat -@ ~{cpu} -o ~{output_prefix}_hap_out.sam ~{output_prefix}_*_hap_out.sam | \
       samtools sort -@ ~{cpu} ~{output_prefix}_hap_out.sam | \
       samtools view -C -@ ~{cpu} --reference ~{references.ref_fasta} -o ~{output_prefix}_realign.cram
       samtools index ~{output_prefix}_realign.cram -@ ~{cpu}
       ls -lh ~{output_prefix}_realign.cram
-    fi
-    touch "~{output_prefix}_realign.cram"
-    touch "~{output_prefix}_realign.cram.crai"
+  fi
+  touch "~{output_prefix}_realign.cram"
+  touch "~{output_prefix}_realign.cram.crai"
 
-  ls -lh *tfrecord*
+  ls -lh -- *tfrecord*
 
   if [ ~{count_candidates_with_dvtools} == "true" ]
   then
-    for tfrec in $(ls *tfrecord* | sort); do
-      dvtools --infile $tfrec --filetype dv --op vcf --outfile $tfrec.vcf
-      echo "$prefix: $(wc -l < "$tfrec.vcf")"
-      rm $tfrec.vcf
+    for tfrec in $(find . -name '*tfrecord*' | sort); do
+      dvtools --infile "$tfrec" --filetype dv --op vcf --outfile "$tfrec.vcf"
+      echo "$tfrec: $(wc -l < "$tfrec.vcf")"
+      rm "$tfrec.vcf"
     done
   fi
 
@@ -265,6 +275,7 @@ task UGMakeExamples{
     disks: "local-disk " + disk_size + " HDD"
     docker: docker
     preemptible: preemptible_tries
+    noAddress: no_address
   }
   output {
     File monitoring_log = "monitoring.log"
@@ -296,6 +307,7 @@ task UGCallVariants{
     File monitoring_script
     Int disk_size = ceil(1.05*size(examples, 'GB') + 10)
     Int? call_variants_extra_mem
+    Boolean no_address = true
   }
   Int num_examples = length(examples)
   Int extra_mem = select_first([call_variants_extra_mem, 8])
@@ -308,16 +320,16 @@ task UGCallVariants{
 
     nvidia-smi --query-gpu=timestamp,name,driver_version,temperature.gpu,utilization.gpu,utilization.memory,memory.used --format=csv -l 60 -f  ./nvidia-smi.log & #todo change from old
 
-    # Rename the serialized model to fit the onnx file (allow various versions of serialized model files with different file names)
+    cp ~{model_onnx} ~{onnx_base_name}
+    # Rename the serialized model to fit the onnx file (allow various versions of serialized model files with different file names)        
     if [ "~{defined(model_serialized)}" == "true" ] && [ "~{model_serialized}" != "~{model_onnx}.serialized" ]
     then
       echo 'Renaming serialized model to fit onnx file'
-      cp ~{model_onnx} ~{onnx_base_name}
       cp ~{model_serialized} ~{onnx_base_name}.serialized
     fi
 
     printf "%b\n" "[RT classification]" \
-      "onnxFileName = ~{model_onnx}" \
+      "onnxFileName = ~{onnx_base_name}" \
       "useSerializedModel = 1" \
       "trtWorkspaceSizeMB = 2000" \
       "numInferTreadsPerGpu = 2" \
@@ -335,12 +347,12 @@ task UGCallVariants{
       "numConversionThreads = 2" \
       "numExampleFiles = ~{num_examples}\n" > params.ini
 
-    cat ~{write_lines(examples)} | awk '{print "exampleFile" NR " = "$0}' >> params.ini
+    awk '{print "exampleFile" NR " = "$0}' ~{write_lines(examples)} >> params.ini
 
     call_variants --param params.ini --fp16
 
     num_candidates=$(grep -oP 'total batch size \K\d+(?= vectors)' call_variants*.log)
-    echo "$num_candidates" > num_candidates_${num_candidates}
+    echo "$num_candidates" > "num_candidates_${num_candidates}"
 
   >>>
   runtime {
@@ -350,8 +362,9 @@ task UGCallVariants{
     docker: docker
     gpuType: "nvidia-tesla-p100"
     gpuCount: num_gpus
-    acceleratorType : gpu_type
-    acceleratorCount : num_gpus
+    acceleratorType : gpu_type #!UnknownRuntimeKey
+    acceleratorCount : num_gpus #!UnknownRuntimeKey
+    noAddress: no_address
   }
 output {
     File monitoring_log = "monitoring.log"
@@ -360,13 +373,20 @@ output {
     Array[File] log = glob('call_variants*.log')
     Array[File] output_records = glob('call_variants*.gz')
     Array[File] num_candidates = glob("num_candidates_*")
-    # File output_model_serialized = " ~{onnx_base_name}.serialized" uncomment to output the serilized model (need also to uncomment output_model_serialized in efficient_dv.wdl outputs)
+    File output_model_serialized = "~{onnx_base_name}.serialized"
   }
 }
 
 task UGPostProcessing{
   input{
     Array[File] called_records
+    Array[File] cram_files
+    Array[File] cram_index_files
+
+    # Background sample inputs
+    Array[File] background_cram_files
+    Array[File] background_cram_index_files
+
     File ref
     File ref_index
     String docker
@@ -379,6 +399,8 @@ task UGPostProcessing{
     Int qual_filter
     Array[File]? gvcf_records
     Boolean make_gvcf
+    Boolean recalibrate_vaf
+    Boolean is_somatic
     Int min_variant_quality_hmer_indels
     Int min_variant_quality_exome_hmer_indels
     Int min_variant_quality_non_hmer_indels
@@ -392,14 +414,23 @@ task UGPostProcessing{
                          size(ref, "GB") +
                          size(dbsnp, "GB") +
                          (if make_gvcf then size(select_first([gvcf_records]), "GB") else 0) +
-                         4 + (if make_gvcf then 5 else 0))
-
+                         4 + (if make_gvcf then 5 else 0)) + 
+                         ceil(size(background_cram_files, "GB")) + 
+                         ceil(size(cram_files, "GB")) +
+                         ceil(size(cram_index_files, "GB")) +
+                         ceil(size(background_cram_index_files, "GB"))
+    Boolean no_address = true
   }
+
+  Int indel_threshold_for_recalibration = 30000
+
   String gvcf_args = if make_gvcf then "--gvcf_outfile ~{output_prefix}.g.vcf.gz --nonvariant_site_tfrecord_path @gvcf_records.txt --hcr_bed_file ~{output_prefix}.hcr.bed " else ""
   Array[File] gvcf_records_not_opt = select_first([gvcf_records, []])
   Array[File] empty_array_of_files = []
   Array[File] annotation_intervals_or_empty = select_first([annotation_intervals, empty_array_of_files])
   Array[File] exome_and_annotations = flatten([[exome_intervals], annotation_intervals_or_empty])
+  Boolean defined_background = length(background_cram_files) > 0
+
   command <<<
       bash ~{monitoring_script} | tee monitoring.log >&2 &
       set -xeo pipefail
@@ -424,6 +455,33 @@ task UGPostProcessing{
         cp ~{write_lines(gvcf_records_not_opt)} gvcf_records.txt
       fi
 
+      # shellcheck disable=SC2034
+      foreground=~{sep=',' cram_files} 
+      # shellcheck disable=SC2034
+      background=~{sep=',' background_cram_files} 
+      cram_string="~{true='$foreground;$background' false='$foreground' defined_background}"
+
+      echo "Calculating approximate INDEL variant count"
+      ug_postproc \
+          --infile @called_records.txt \
+          --ref ~{ref} \
+          --outfile "~{output_prefix}.vcf.gz" \
+          --qual_filter ~{qual_filter} \
+          --count_indels --group_variants false |& tee indel.count.log
+
+      indel_count=$( grep indel_count indel.count.log | cut -d " " -f 4 )
+      echo "Approximate INDEL variant count: $indel_count"
+      if [ "$indel_count" -gt ~{indel_threshold_for_recalibration} ]
+      then
+        echo "INDEL variant count is too high, skipping post-processing"
+        recalibration_string=""
+      else 
+        echo "INDEL variant count is low, recalibrating VAF"
+        # shellcheck disable=SC2034
+        recalibration_string="--fix_allele_coverage --fix_allele_indels_only --fix_allele_crams $cram_string"
+      fi
+     
+
       echo 'Running UG post-processing...'
       ug_postproc \
         --infile @called_records.txt \
@@ -439,6 +497,8 @@ task UGPostProcessing{
         --filters_file filters.txt \
         --dbsnp ~{dbsnp} \
         ~{if show_bg_fields then "--consider_bg_fields" else ""} \
+        ~{if recalibrate_vaf then '$recalibration_string' else ""} \
+        ~{if is_somatic then "--ignore_multi_allelic_cvos" else ""} \
         ~{extra_args}
 
       bcftools index -t "~{output_prefix}.vcf.gz"
@@ -469,6 +529,7 @@ task UGPostProcessing{
     cpu: "1"
     disks: "local-disk " + disk_size + " HDD"
     docker: docker
+    noAddress: no_address
   }
   output {
     File monitoring_log = "monitoring.log"
@@ -494,6 +555,7 @@ task QCReport{
 
     Int disk_size = ceil(2 * size(input_vcf, "GB") +
                          size(ref, "GB") + 4)
+    Boolean no_address = true
   }
 
   command <<<
@@ -518,6 +580,7 @@ task QCReport{
     cpu: "1"
     disks: "local-disk " + disk_size + " HDD"
     docker: docker
+    noAddress: no_address
   }
   output {
     File monitoring_log = "monitoring.log"

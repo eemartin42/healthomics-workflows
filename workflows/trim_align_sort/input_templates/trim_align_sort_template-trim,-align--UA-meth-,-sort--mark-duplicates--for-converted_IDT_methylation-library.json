@@ -5,9 +5,9 @@
     ],
     "TrimAlignSort.base_file_name": "<base_file_name>",
     "TrimAlignSort.ref_fastas_cram": [
-        "s3://broad-references/hg38/v0/Homo_sapiens_assembly38.fasta",
+        "s3://ultimagen-workflow-resources-us-east-1/hg38/v0/Homo_sapiens_assembly38.fasta",
         "s3://ultimagen-workflow-resources-us-east-1/hg38/methyl_seq_ref/hg38_Lambda_pUC19.fa",
-        "s3://broad-references/hg19/v0/Homo_sapiens_assembly19.fasta",
+        "s3://ultimagen-workflow-resources-us-east-1/hg19/v0/Homo_sapiens_assembly19.fasta",
         "s3://ultimagen-workflow-resources-us-east-1/ref_cram/hg19.ucsc.fa",
         "s3://ultimagen-workflow-resources-us-east-1/ref_cram/GCF_000001405.25_GRCh37.p13_genomic.fna",
         "s3://ultimagen-workflow-resources-us-east-1/ref_cram/GCF_000001405.39_GRCh38.p13_genomic.fna"
@@ -20,25 +20,26 @@
     "TrimAlignSort.preemptible_tries": 1,
     "TrimAlignSort.no_address": true,
     "TrimAlignSort.cpu": 32,
+    "TrimAlignSort.create_md5_checksum_outputs": false,
     "TrimAlignSort.steps": {
         "trim": true,
         "align": true,
         "sort": true
     },
     "TrimAlignSort.trimmer_parameters": {
-        "formats_description": "s3://ultimagen-workflow-resources-us-east-1/trimmer-formats/1.0/public/trim_align_sort/trim-ILMN-adapters-and-low-complexity-tail.json",
+        "formats_description": "s3://ultimagen-workflow-resources-us-east-1/trimmer-formats/2.25/public/trim_align_sort/trim-ILMN-adapters-and-low-complexity-tail.json",
         "failure_read_group": "unmatched",
         "format": "trim ILMN adapters and low complexity tail"
     },
     "TrimAlignSort.aligner": "ua-meth",
     "TrimAlignSort.ua_meth_parameters": {
-        "index_g2a": "s3://ultimagen-workflow-resources-us-east-1/hg38/UA/hg38_Lambda_pUC19.fa.uai.g2a",
-        "index_c2t": "s3://ultimagen-workflow-resources-us-east-1/hg38/UA/hg38_Lambda_pUC19.fa.uai.c2t"
+        "index_g2a": "s3://ultimagen-workflow-resources-us-east-1/hg38/UA/hg38_Lambda_pUC19_v45.uai.g2a",
+        "index_c2t": "s3://ultimagen-workflow-resources-us-east-1/hg38/UA/hg38_Lambda_pUC19_v45.uai.c2t"
     },
     "TrimAlignSort.sorter_params": {
         "mark_duplicates": true,
         "aligned": true,
-        "output_path": "{outputGroup}/{outputGroup}{?_minorRG}",
+        "mark_duplicates_ends_read_uncertainty": 0,
         "coverage_intervals": "s3://ultimagen-workflow-resources-us-east-1/interval_lists/coverage_intervals.hg38.tar.gz"
     }
 }

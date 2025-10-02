@@ -60,10 +60,11 @@ import "tasks/single_cell_tasks.wdl" as SingleCellTasks
 import "star_solo.wdl" as StarSoloWdl
 import "star_align_gene_count.wdl" as StarAlignWorkflow
 import "trim_align_sort.wdl" as TrimAlignSortSubWF
+import "tasks/general_tasks.wdl" as UGGeneralTasks
 
 workflow SingleCell {
     input {
-        String pipeline_version = "1.18.3" # !UnusedDeclaration
+        String pipeline_version = "1.23.0" # !UnusedDeclaration
 
         File input_file
         String base_file_name
@@ -80,6 +81,7 @@ workflow SingleCell {
 
         String insert_rg
         String barcode_rg
+        String? additional_rg
         File star_genome
 
         SingleCellQcThresholds qc_thresholds
@@ -97,6 +99,8 @@ workflow SingleCell {
         StarGenomeGenerateParams? genome_generate_params
         String? star_align_extra_args
         File? star_align_gtf_override
+
+        Boolean create_md5_checksum_outputs = false
 
         #@wv not(" " in base_file_name or "#" in base_file_name or ',' in base_file_name or 'sample' in base_file_name)
         #@wv suffix(input_file) in {".bam", ".cram"}
@@ -130,6 +134,7 @@ workflow SingleCell {
         # STAR genome generation validations
         #@wv defined(downstream_analysis) and (downstream_analysis == "star_solo" or downstream_analysis == "star") and defined(genome_generate_params) -> suffix(genome_generate_params['fasta_files']) <= {'.fasta','.fa'}
         #@wv defined(downstream_analysis) and (downstream_analysis == "star_solo" or downstream_analysis == "star") and defined(genome_generate_params) -> suffix(genome_generate_params['gtf_file']) == '.gtf'
+
     }
     call Globals.Globals as Globals
     GlobalVariables global = Globals.global_dockers
@@ -154,7 +159,8 @@ workflow SingleCell {
                 "TrimAlignSort.StarAlignment.memory_gb",
                 "StarAlignment.memory_gb",
                 "SingleCell.StarAlignSubSample.memory_gb",
-                "qc_memory_gb"
+                "qc_memory_gb",
+                "MergeMd5sToJson.output_json"
             ]
         }
     }
@@ -195,6 +201,11 @@ workflow SingleCell {
             help: "Read group name for the barcode reads, e.g. S1_L001_R1_001",
             type: "String",
             category: "input_required"
+        }
+        additional_rg: {
+            help: "Additional read group name for a third read, e.g. S1_L001_I1_001",
+            type: "String",
+            category: "optional"
         }
         references: {
             help: "References for the workflow",
@@ -256,6 +267,11 @@ workflow SingleCell {
             help: "Number of CPUs to use (for Trimmer, conversion to fastq, and alignment tasks)", 
             category: "param_required"
         }
+        create_md5_checksum_outputs: {
+           help: "Create md5 checksum for requested output files",
+           type: "Boolean",
+           category: "input_optional"
+        }
         output_barcodes_fastq: {
             type: "File",
             help: "The fastq with the barcodes portion of the read", 
@@ -264,6 +280,11 @@ workflow SingleCell {
         output_insert_fastq: {
             type: "File",
             help: "The fastq with the insert portion of the read", 
+            category: "output"
+        }
+        output_additional_fastq: {
+            type: "File?",
+            help: "The additional fastq, if an additional_rg was specified", 
             category: "output"
         }
         report_html: {
@@ -331,11 +352,16 @@ workflow SingleCell {
             type: "File", 
             category: "output"
         }
+        md5_checksums_json: {
+            help: "json file that will contain md5 checksums for requested output files",
+            type: "File",
+            category: "output"
+        }
     }
 
 
     File monitoring_script = select_first([monitoring_script_input, global.monitoring_script])
-
+    
     call TrimAlignSortSubWF.TrimAlignSort {
         input:
             input_cram_bam_list     = [input_file],
@@ -351,19 +377,27 @@ workflow SingleCell {
             monitoring_script_input = monitoring_script
     }
 
+    Array[File] fastq_file_list = select_all(select_first([TrimAlignSort.fastq_file_list]))
+
     call SingleCellTasks.FindInsertBarcodeFastq {
         input:
-            input_fastq_list        = select_all(select_first([TrimAlignSort.fastq_file_list])),
+            input_fastq_list        = fastq_file_list,
             sub_sumple_fastq_list   = select_all(select_first([TrimAlignSort.sub_sampled_output])),
             sorter_csv_stats_list   = select_all(select_first([TrimAlignSort.sorter_stats_csv_list])),
             sorter_json_stats_list  = select_all(select_first([TrimAlignSort.sorter_stats_json_list])),
             base_file_name          = base_file_name,
             insert_rg               = insert_rg,
             barcode_rg              = barcode_rg,
+            additional_rg          = additional_rg,
             no_address              = no_address,
             monitoring_script       = monitoring_script,
             docker                  = global.single_cell_qc_docker
     }
+
+    File insert_fastq = fastq_file_list[FindInsertBarcodeFastq.insert_fastq_index]
+    File barcode_fastq = fastq_file_list[FindInsertBarcodeFastq.barcode_fastq_index]
+    
+    if (FindInsertBarcodeFastq.additional_fastq_index != -1) { File additional_fastq = fastq_file_list[FindInsertBarcodeFastq.additional_fastq_index] }
 
     String sub_sample_star_align_extra_args = "--outSAMunmapped Within --chimOutType WithinBAM SoftClip --clip3pNbases 0 --outFilterMatchNminOverLread 0.66 --outFilterScoreMinOverLread 0.66 --scoreDelOpen -2 --scoreDelBase -2 --scoreInsOpen -2--scoreInsBase -2 --alignEndsType Local --outSAMmapqUnique 60"
     call StarAlignWorkflow.StarAlignment as StarAlignSubSample{
@@ -402,8 +436,8 @@ workflow SingleCell {
         if(analysis_type == "star_solo"){
             call StarSoloWdl.StarSoloWorkflow {
                 input:
-                    insert_fastq            = FindInsertBarcodeFastq.insert_fastq,
-                    barcode_fastq           = FindInsertBarcodeFastq.barcode_fastq,
+                    insert_fastq            = insert_fastq,
+                    barcode_fastq           = barcode_fastq,
                     base_file_name          = base_file_name,
                     star_solo_params        = select_first([star_solo_params]),
                     genome_generate_params  = genome_generate_params,
@@ -412,6 +446,31 @@ workflow SingleCell {
                     cpu                     = cpu,
                     monitoring_script_input = monitoring_script
             }
+        }
+    }
+
+    File report_html_ = SingleCellQc.report
+    if (create_md5_checksum_outputs) {
+
+        Array[File] output_files = select_all(flatten([
+                                                      select_first([[barcode_fastq], []]),
+                                                      select_first([[insert_fastq], []]),
+                                                      select_first([[additional_fastq], []]),
+                                                      select_first([[report_html_], []]),
+                                                      ]))
+
+        scatter (file in output_files) {
+            call UGGeneralTasks.ComputeMd5 as compute_md5 {
+                input:
+                    input_file = file,
+                    docker = global.ubuntu_docker,
+            }
+        }
+
+        call UGGeneralTasks.MergeMd5sToJson {
+            input:
+                md5_files = compute_md5.checksum,
+                docker = global.ugbio_core_docker
         }
     }
 
@@ -426,11 +485,12 @@ workflow SingleCell {
         File? unmatched_cram                = TrimAlignSort.unmatched_cram
 
         # Fastq outputs
-        File output_barcodes_fastq          = FindInsertBarcodeFastq.barcode_fastq
-        File output_insert_fastq            = FindInsertBarcodeFastq.insert_fastq
+        File output_barcodes_fastq          = barcode_fastq
+        File output_insert_fastq            = insert_fastq
+        File? output_additional_fastq       = additional_fastq
 
         # SingleCellQc outputs
-        File report_html                    = SingleCellQc.report
+        File report_html                    = report_html_
         File application_qc_h5          = SingleCellQc.h5
 
         # Star solo outputs
@@ -440,5 +500,7 @@ workflow SingleCell {
         File? star_bam                    = StarAlignSubSample.output_bam
         File? star_reads_per_gene_file    = StarAlignSubSample.reads_per_gene_file
         File? star_stats                  = StarAlignSubSample.star_stats
+
+        File? md5_checksums_json = MergeMd5sToJson.md5_json
     }
 }

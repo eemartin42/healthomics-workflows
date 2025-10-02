@@ -36,7 +36,7 @@ task Demux {
 
     String demux_output_path = "demux_output/"
     String align_flag = if defined(sorter_params.aligned) then "--align=~{sorter_params.aligned}" else "--align=true"
-    String output_group = select_first([sorter_params.output_group, base_file_name])
+    String output_group = select_first([sorter_params.output_group, "~{base_file_name}{?_minorRG}"])
     String output_path = select_first([sorter_params.output_path, "{outputGroup}/{outputGroup}"])
     String reference_fasta_base = basename(reference_fasta)
 
@@ -109,6 +109,9 @@ task Demux {
             --mark-duplicates=~{sorter_params.mark_duplicates} \
             --output-group=~{output_group} \
             --output-path=~{output_path} \
+            ~{true="--mark-duplicates-ends-read-uncertainty=" false="" defined(sorter_params.mark_duplicates_ends_read_uncertainty)}~{sorter_params.mark_duplicates_ends_read_uncertainty} \
+            ~{true="--mark-duplicates-flow-use-clipped-location=" false="" defined(sorter_params.mark_duplicates_flow_use_clipped_location)}~{sorter_params.mark_duplicates_flow_use_clipped_location} \
+            ~{true="--mark-duplicates-flow-q-is-known-end=" false="" defined(sorter_params.mark_duplicates_flow_q_is_known_end)}~{sorter_params.mark_duplicates_flow_q_is_known_end} \
             ~{"--umi=" + sorter_params.umi_tag} \
             ~{align_flag} \
             $coverage_intervals_flag \
@@ -227,6 +230,7 @@ task Sorter {
             --output-dir=~{sorter_out_dir} \
             --nthreads ~{cpu} \
             --timestamp=~{timestamp} \
+            --min-thread-parallelism=1 \
             ~{if defined(sorter_params.single_cell_cbc_classifier) then "--cell-barcode-filter-classifier" else ""} ~{default="" sorter_params.single_cell_cbc_classifier} \
             ~{default="" sorter_params.sort_extra_args} \
             --progress

@@ -20,12 +20,13 @@ version 1.0
 # CHANGELOG
 
 import "tasks/structs.wdl" as structs
+import "tasks/general_tasks.wdl" as UGGeneral
 import "tasks/globals.wdl" as GlobalsWDL
 import "efficient_dv.wdl" as EDV
 
 workflow SegDupAnalysis {
 	input {
-        String pipeline_version = "1.18.3" # !UnusedDeclaration
+        String pipeline_version = "1.23.0" # !UnusedDeclaration
         String base_file_name
         File input_cram_bam
         File input_crai_bai
@@ -43,6 +44,7 @@ workflow SegDupAnalysis {
         File dbsnp_index
         String? cloud_provider_override
         Int preemptible_tries = 3
+        Boolean no_address = true
         # winval validations
         #@wv not(" " in base_file_name or "#" in base_file_name or ',' in base_file_name)
         #@wv suffix(input_cram_bam) in {".bam", ".cram"}
@@ -65,7 +67,8 @@ workflow SegDupAnalysis {
                     "DV.UGMakeExamples.count_candidates_with_dvtools",
                     "DV.single_strand_filter", 
                     "DV.keep_duplicates", 
-                    "DV.add_ins_size_channel"
+                    "DV.add_ins_size_channel",
+                    "BedToIntervalList.disk_size"
             ]
         }
     }
@@ -101,7 +104,7 @@ workflow SegDupAnalysis {
             category: "input_advanced"
         }
         segdup_regions: {
-            help: "Segmental duplication regions. All reads will be remapped to `segdup_regions` and the calling will happen only on these regions, see template",
+            help: "Segmental duplication regions. All reads will be remapped to `segdup_regions` and the calling will happen only on these regions, see template (BED file)",
             type: "File",
             category: "input_advanced"
         }
@@ -154,6 +157,11 @@ workflow SegDupAnalysis {
             help: "Number of preemptible tries",
             type: "Int",
             category: "input_optional"
+        }
+        no_address: {
+            help: "Start instances with no public IP address",
+            type: "Boolean",
+            category: "input_advanced"
         }
         remap_bam: {
             help: "Remapped BAM file",
@@ -219,6 +227,17 @@ workflow SegDupAnalysis {
             monitoring_script = global.monitoring_script
     }
 
+    call UGGeneral.BedToIntervalList {
+        input:
+            monitoring_script = global.monitoring_script,
+            input_file = segdup_regions,
+            reference_dict = references.ref_dict,
+            base_file_name = base_file_name, 
+            docker = global.broad_gatk_docker,
+            preemptible_tries = preemptible_tries,
+            no_address = no_address
+    }
+
     call EDV.EfficientDV as DV {
         input:
             base_file_name = base_file_name,
@@ -226,6 +245,8 @@ workflow SegDupAnalysis {
             cram_index_files = [PoolReads.remap_cram_index],
             references = references,
             make_gvcf = false,
+            is_somatic = false,
+            recalibrate_vaf = false,
             num_shards = 3,
             cap_at_optimal_coverage = false,
             optimal_coverages = [70],
@@ -233,10 +254,12 @@ workflow SegDupAnalysis {
             min_fraction_non_hmer_indels = 0.05,
             min_fraction_hmer_indels = 0.05,
             min_variant_quality_exome_hmer_indels = 5,
+            min_fraction_single_strand_non_snps = 0.15,
+            normalize_strand_bias = false,
             # Call variants args
             model_onnx = model_onnx,
             model_serialized = model_serialized,
-
+            target_intervals = BedToIntervalList.interval_list, 
             exome_intervals = exome_intervals,
             ref_dbsnp = dbsnp,
             ref_dbsnp_index = dbsnp_index,
@@ -245,6 +268,7 @@ workflow SegDupAnalysis {
             cloud_provider_override = cloud_provider_override,
             preemptible_tries = preemptible_tries
     }
+
     output { 
         File remap_bam = PoolReads.remap_cram
         File remap_bam_index = PoolReads.remap_cram_index
@@ -339,8 +363,8 @@ task CallCNV {
         set -ef pipefail
         set -x
         bash ~{monitoring_script} | tee monitoring.log >&2 &
-
-        tar xvf ~{cn_model}
+        
+        tar --no-same-owner --no-same-permissions -xvf ~{cn_model}
         ls -l
         find . -name "*model*"
         

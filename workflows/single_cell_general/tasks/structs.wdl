@@ -56,7 +56,7 @@ struct BwaMethReferences {
 # UA alignment
 struct UaParameters {
   File? ua_index
-  File ref_alt
+  File? ref_alt
   String ua_extra_args
   Boolean v_aware_alignment_flag
   Int? cpus
@@ -133,6 +133,7 @@ struct TrimmerParameters {
   String? filename_prefix_sep       # default is set to "_", but this can be changed to "-" as in the case of ancient DNA trimmed output
   String? output_failed_file_name_suffix # Setting the name for the failed reads file. Default is "failed.cram", if this parameter is given will be <base_file_name>_<output_failed_file_name_suffix>
   Boolean? remove_small_files       # Allows to remove trimmed files below 1Gb in size
+  Boolean? add_run_id_as_ri_tag     # If true, will extract the run id from the input file and add it as a tag to the output reads.
 }
 
 struct ReferenceDbSnp {
@@ -140,33 +141,39 @@ struct ReferenceDbSnp {
     File ref_dbsnp_index
 }
 
-struct FeatureMapParams {
-  Int min_mapq
-  Int snv_identical_bases
-  Int snv_identical_bases_after
-  Int min_score
-  Int limit_score
-  String extra_args
-  Int max_hmer_length
-  Int motif_length_to_annotate
+struct FeatureMapParams { 
+  # snvfind parameters
+  Int? min_mapq                     # -q minimum mapping quality. defaults to 20
+  Int? padding_size                 # -p padding size. defaults to 5
+  Int? score_limit                  # -L score limit
+  Int? max_score_to_emit            # -X max score to emit
+  Int? min_score_to_emit            # -N min score to emit
+  Boolean? exclude_nan_scores       # -n exclude nan scores
+  Boolean? include_dup_reads        # -d include dup reads
+  Boolean? keep_supplementary       # -k keep supplementary alignments
+  Int? surrounding_quality_size     # -Q surrounding median and mean quality size. defaults to pad
+  Int? reference_context_size       # -r reference context size, defualts to 3
+  Array[String]? cram_tags_to_copy  # -c list of attributes to copy from sam to vcf
+  String? attributes_prefix         # -C prefix for copied attributes
+  File? bed_file                    # -b bed file containing ranges to process
 }
 
 struct SingleReadSNVParams {
-    Array[String] numerical_features
-    Array[String] boolean_features
-    Array[String] balanced_sampling_info_fields
-    Int train_set_size
-    Int test_set_size
-    String pre_filter
+    Int tp_train_set_size
+    Int fp_train_set_size
+    Float tp_train_set_size_sampling_overhead
     Int random_seed
     Int num_CV_folds
-    String split_folds_by
-    String ppmSeq_adapter_version
+    Int min_coverage_filter
+    Float max_coverage_factor
+    Float max_vaf_for_fp  # Maximum VAF for false positive filtering
+    Array[String] pre_filters  # Pre-filter configuration in format "name=X:field=Y:op=Z:value=W:type=T"
 }
 
 struct MrdAnalysisParams {
   String signature_filter_query
   String read_filter_query
+  String? tumor_sample # Optional, used to specify the tumor sample name in singature vcf
 }
 
 struct StarsoloBamParams {
@@ -264,8 +271,11 @@ struct SorterParams {
   Boolean? aligned          # demux arg to mentioned if the data aligned. The default is true.
   String? output_group      # Define a custom read-group e.g. "majorRG-minorRG"  (instead of the default "majorRG"). majorRG is the value of the RG tag of each read. See sorter documentation for more details.
   String? output_path       # Define the output path for a custom read-group. Default is: {outputGroup}/{outputGroup} !NOTE! the path must include a subfolder
-  Float? downsample_frac # Downsample fraction (0.0-1.0) to be used in Demux
-  Int? downsample_seed  # Downsample seed to be used in Demux
+  Float? downsample_frac    # Downsample fraction (0.0-1.0) to be used in Demux
+  Int? downsample_seed      # Downsample seed to be used in Demux
+  Int? mark_duplicates_ends_read_uncertainty   # Number of bases of uncertainty in read ends position to use when marking duplicates
+  Boolean? mark_duplicates_flow_use_clipped_location  # If true, use the clipped location of the read to mark duplicates, otherwise add the softclip length to the alignment end position
+  Boolean? mark_duplicates_flow_q_is_known_end  # If true, the ends in quality trimmed reads are treated as known when marking duplicates. Otherwise, the ends are treated as unknown so any end position is matched.
   String? demux_extra_args
   String? sort_extra_args
   Int? memory_gb            # Override the default memory (in GB) used by sorter
