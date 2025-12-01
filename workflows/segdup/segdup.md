@@ -113,6 +113,11 @@ Processes segmental duplications in the genome by collapsing all copies on a sin
         <i>Int </i> &mdash; 
          Minimal mapping quality for candidate generation <br /> 
 </p>
+<p name="SegDupAnalysis.DV.min_hmer_plus_one_candidate">
+        <b>SegDupAnalysis.DV.min_hmer_plus_one_candidate</b><br />
+        <i>Int? </i> &mdash; 
+         Minimal hmer length, above which more 1-bp insertion candidates are generated, provided they also meet allele frequency conditions <br /> 
+</p>
 <p name="SegDupAnalysis.DV.max_reads_per_partition">
         <b>SegDupAnalysis.DV.max_reads_per_partition</b><br />
         <i>Int </i> &mdash; 
@@ -152,6 +157,11 @@ Processes segmental duplications in the genome by collapsing all copies on a sin
         <b>SegDupAnalysis.DV.germline_vcf</b><br />
         <i>File? </i> &mdash; 
          Germline vcf file in order to generate haplotypes that incorporate germline variants <br /> 
+</p>
+<p name="SegDupAnalysis.DV.optimization_level">
+        <b>SegDupAnalysis.DV.optimization_level</b><br />
+        <i>Int? </i> &mdash; 
+         Optimization level for TensorRT engine in call_variants <br /> 
 </p>
 <p name="SegDupAnalysis.DV.output_call_variants_tfrecords">
         <b>SegDupAnalysis.DV.output_call_variants_tfrecords</b><br />

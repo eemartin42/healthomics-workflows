@@ -25,6 +25,7 @@ task UGMakeExamples{
     Float min_fraction_hmer_indels
     Float min_fraction_non_hmer_indels
     Float min_fraction_single_strand_non_snps
+    Int? min_hmer_plus_one_candidate
     Int candidate_min_mapping_quality
     Int max_reads_per_partition
     Int assembly_min_base_quality
@@ -114,9 +115,10 @@ task UGMakeExamples{
     if [[ "~{cloud_provider}" != "aws" ]]; then
       gatk --java-options "-Xms2G" PrintReads \
           -I ~{sep=' -I ' cram_files} \
-          -O input.cram \
+          -O /dev/stdout \
           -L ~{interval} \
-          -R ~{references.ref_fasta}
+          -R ~{references.ref_fasta} |\
+      samtools view -C -T ~{references.ref_fasta} -o input.cram --output-fmt-option embed_ref=1 -
 
       samtools index input.cram -@ ~{cpu}
       input=input.cram
@@ -127,9 +129,10 @@ task UGMakeExamples{
       if [[ "~{defined_background}" == "true" ]]; then
         gatk --java-options "-Xms2G" PrintReads \
             -I  ~{sep=' -I ' background_cram_files} \
-            -O background.cram \
+            -O /dev/stdout \
             -L ~{interval} \
-            -R ~{references.ref_fasta}
+            -R ~{references.ref_fasta} |\
+        samtools view -C -T ~{references.ref_fasta} -o background.cram --output-fmt-option embed_ref=1 -
 
         samtools index background.cram -@ ~{cpu}
         background=background.cram
@@ -207,6 +210,7 @@ task UGMakeExamples{
         --cgp-min-fraction-non-hmer-indels ~{min_fraction_non_hmer_indels} \
         --cgp-min-fraction-single-strand-non-snps ~{min_fraction_single_strand_non_snps} \
         --cgp-min-mapping-quality ~{candidate_min_mapping_quality} \
+        --cgp-min-hmer-plus-one-candidate ~{if defined(min_hmer_plus_one_candidate) then min_hmer_plus_one_candidate else 7} \
         --max-reads-per-region ~{max_reads_per_partition} \
         --assembly-min-base-quality ~{assembly_min_base_quality} \
         ~{true="--realigned-sam" false="" output_realignment} \
@@ -298,6 +302,7 @@ task UGCallVariants{
     Array[File] examples
     File model_onnx
     File? model_serialized
+    Boolean is_somatic
     String docker
     Int call_variants_uncompr_buf_size_gb
     String gpu_type
@@ -307,10 +312,12 @@ task UGCallVariants{
     File monitoring_script
     Int disk_size = ceil(1.05*size(examples, 'GB') + 10)
     Int? call_variants_extra_mem
+    Int? optimization_level
     Boolean no_address = true
   }
   Int num_examples = length(examples)
   Int extra_mem = select_first([call_variants_extra_mem, 8])
+  Int builder_optimization_level  = select_first([optimization_level, if is_somatic then 5 else 1])
   Int mem = num_threads * call_variants_uncompr_buf_size_gb + extra_mem
   String onnx_base_name = basename(model_onnx)
   command <<<
@@ -330,6 +337,7 @@ task UGCallVariants{
 
     printf "%b\n" "[RT classification]" \
       "onnxFileName = ~{onnx_base_name}" \
+      "builderOptimizationLevel = ~{builder_optimization_level}" \
       "useSerializedModel = 1" \
       "trtWorkspaceSizeMB = 2000" \
       "numInferTreadsPerGpu = 2" \
@@ -351,8 +359,9 @@ task UGCallVariants{
 
     call_variants --param params.ini --fp16
 
-    num_candidates=$(grep -oP 'total batch size \K\d+(?= vectors)' call_variants*.log)
-    echo "$num_candidates" > "num_candidates_${num_candidates}"
+    num_candidates_val=$(grep -oP 'total batch size \K\d+(?= vectors)' call_variants*.log)
+    echo "$num_candidates_val" > "num_candidates_${num_candidates_val}"
+    echo "$num_candidates_val" > nc.txt
 
   >>>
   runtime {
@@ -373,6 +382,7 @@ output {
     Array[File] log = glob('call_variants*.log')
     Array[File] output_records = glob('call_variants*.gz')
     Array[File] num_candidates = glob("num_candidates_*")
+    Int num_candidates_as_int = read_int("nc.txt")
     File output_model_serialized = "~{onnx_base_name}.serialized"
   }
 }

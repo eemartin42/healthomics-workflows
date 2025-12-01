@@ -32,7 +32,7 @@ import "tasks/vcf_postprocessing_tasks.wdl" as PostProcesTasks
 workflow EfficientDV {
   input {
     # Workflow args
-    String pipeline_version = "1.23.0" # !UnusedDeclaration
+    String pipeline_version = "1.25.0" # !UnusedDeclaration
     String base_file_name
 
     # Mandatory inputs
@@ -62,6 +62,7 @@ workflow EfficientDV {
     Int min_base_quality = 5
     Int pileup_min_mapping_quality = 5
     Int candidate_min_mapping_quality = 5
+    Int? min_hmer_plus_one_candidate = 7
     Int max_reads_per_partition = 1500
     Int dbg_min_base_quality = 0 # Minimal base quality during the assembly process
     Boolean prioritize_alt_supporting_reads = false
@@ -86,6 +87,7 @@ workflow EfficientDV {
     # Call variants args
     File model_onnx
     File? model_serialized
+    Int? optimization_level
     Boolean output_call_variants_tfrecords = false
 
     # PostProcessing args
@@ -113,7 +115,7 @@ workflow EfficientDV {
     Int? ug_make_examples_cpus_override
     Int preemptible_tries = 1
     Int? ug_call_variants_extra_mem
-    String call_variants_gpu_type = "nvidia-tesla-a10g" # For AWS
+    String call_variants_gpu_type = "nvidia-l4" # For AWS
     Int call_variants_gpus = 1
     Int call_variants_cpus = 8
     Int call_variants_threads = 8
@@ -294,6 +296,10 @@ workflow EfficientDV {
       help: "Minimal mapping quality for candidate generation",
       category: "param_optional"
     }
+    min_hmer_plus_one_candidate: {
+       help: "Minimal hmer length, above which more 1-bp insertion candidates are generated, provided they also meet allele frequency conditions",
+       category: "param_optional"
+    }
     max_reads_per_partition: {
       type: "Int",
       help: "Maximal number of reads that are stored in memory when analyzing an active region",
@@ -373,6 +379,11 @@ workflow EfficientDV {
     model_serialized: {
       help: "TensorRT model for calling variants, serialized for a specific platform (it is regenerated if not provided)",
       category: "ref_optional"
+    }
+    optimization_level: {
+      type: "Int",
+      help: "Optimization level for TensorRT engine in call_variants",
+      category: "param_optional"
     }
     output_call_variants_tfrecords: {
       help: "Output tfrecords from call_variants",
@@ -525,22 +536,27 @@ workflow EfficientDV {
     }
     realigned_cram_index: {
       help: "Realigned CRAM index",
+
       category: "output"
     }
     flow_order: {
       help: "Flow order",
+      type: "String",
       category: "output"
     }
     report_html: {
       help: "QC report html",
+      type: "File",
       category: "output"
     }
     qc_h5: {
       help: "QC stats in h5 file format",
+      type: "File",
       category: "output"
     }
     qc_metrics_h5: {
       help: "QC stats in specific format for UGDV workflow",
+      type: "File",
       category: "output"
     }
     custom_annotation_names: {
@@ -550,6 +566,12 @@ workflow EfficientDV {
     }
     num_candidates: {
       help: "Number of candidates that call_variants processed",
+      type: "File",
+      category: "output"
+    }
+    num_candidates_as_int: {
+      help: "Number of candidates that call_variants processed (as an integer)",
+      type: "Int",
       category: "output"
     }
   }
@@ -642,6 +664,7 @@ workflow EfficientDV {
         min_fraction_snps = min_fraction_snps,
         min_fraction_hmer_indels = min_fraction_hmer_indels,
         min_fraction_non_hmer_indels = min_fraction_non_hmer_indels,
+        min_hmer_plus_one_candidate = min_hmer_plus_one_candidate,
         candidate_min_mapping_quality = candidate_min_mapping_quality,
         max_reads_per_partition = max_reads_per_partition,
         assembly_min_base_quality  = dbg_min_base_quality,
@@ -676,6 +699,7 @@ workflow EfficientDV {
       examples = examples_array,
       model_onnx = model_onnx,
       model_serialized = model_serialized,
+      is_somatic = is_somatic,
       docker = global.ug_call_variants_docker,
       call_variants_uncompr_buf_size_gb = call_variants_uncompr_buf_size_gb,
       gpu_type = call_variants_gpu_type,
@@ -684,6 +708,7 @@ workflow EfficientDV {
       num_threads = call_variants_threads,
       monitoring_script = monitoring_script,
       call_variants_extra_mem = ug_call_variants_extra_mem,
+      optimization_level = optimization_level,
       no_address = no_address
   }
 
@@ -830,5 +855,6 @@ workflow EfficientDV {
     File qc_h5              = QCReport.qc_h5
     File qc_metrics_h5      = QCReport.qc_metrics_h5
     Array[File] num_candidates   = UGCallVariants.num_candidates
+    Int num_candidates_as_int    = UGCallVariants.num_candidates_as_int
   }
 }
