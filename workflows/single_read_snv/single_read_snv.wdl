@@ -27,11 +27,11 @@ version 1.0
 # 1.10.1 Added LA_7 adapter version
 # 1.7.0 Initial implementation of single_read_snv wdl
 
-import "tasks/structs.wdl" as Structs
-import "tasks/general_tasks.wdl" as UGGeneralTasks
-import "tasks/qc_tasks.wdl" as UGQCTasks
-import "tasks/mrd.wdl" as UGMrdTasks
-import "tasks/globals.wdl" as Globals
+import "https://raw.githubusercontent.com/eemartin42/healthomics-workflows/refs/heads/main/workflows/single_read_snv/tasks/structs.wdl" as Structs
+import "https://raw.githubusercontent.com/eemartin42/healthomics-workflows/refs/heads/main/workflows/single_read_snv/tasks/general_tasks.wdl" as UGGeneralTasks
+import "https://raw.githubusercontent.com/eemartin42/healthomics-workflows/refs/heads/main/workflows/single_read_snv/tasks/qc_tasks.wdl" as UGQCTasks
+import "https://raw.githubusercontent.com/eemartin42/healthomics-workflows/refs/heads/main/workflows/single_read_snv/tasks/mrd.wdl" as UGMrdTasks
+import "https://raw.githubusercontent.com/eemartin42/healthomics-workflows/refs/heads/main/workflows/single_read_snv/tasks/globals.wdl" as Globals
 
 
 workflow SingleReadSNV {
