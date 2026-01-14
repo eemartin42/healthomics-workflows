@@ -12,38 +12,11 @@ workflow Globals {
   input {
   GlobalVariables glob ={
         "ubuntu_docker": "ubuntu:focal",
-        "gitc_jar_path": "/usr/gitc/",
-        "ug_gatk_picard_docker": "ultimagenomics/ug_gatk_picard:0.15",
-        "broad_gatk_docker": "broadinstitute/gatk:4.6.0.0",
-        "ug_call_variants_docker": "ultimagenomics/call_variants:2.2.3",
-        "ug_make_examples_docker": "ultimagenomics/make_examples:3.1.8",
-        "perl_docker": "perl:5.38",
-        "bcftools_docker": "staphb/bcftools:1.19",
         "monitoring_script": "gs://ultima-ref-files/monitor_1.0.sh",
-        "ref_cache_script": "gs://ultima-ref-files/seq_cache_populate.pl",
-        "ua_docker": "ultimagenomics/alignment:3.0.3",
-        "giraffe_docker": "ultimagenomics/giraffe:1.47.1",
-        "rematching_docker": "ultimagenomics/rematcher:v1.0.0",
-        "trimmer_docker": "ultimagenomics/trimmer:2.3.3",
-        "star_docker": "ultimagenomics/star:2.7.10a",
-        "sorter_docker": "ultimagenomics/sorter:1.4.14",
-        "gridss_docker": "ultimagenomics/gridss:0c97dd1",
-        "gripss_docker": "ultimagenomics/gripss:ug_2.4.1_165b492",
-        "single_cell_qc_docker": "ultimagenomics/ugbio_single_cell:1.14.0",
-        "segdup_docker": "ultimagenomics/parascopy:1.1.2_3f14bd4",
-        "ugbio_core_docker": "ultimagenomics/ugbio_core:1.16.1",
-        "ugbio_cnv_docker": "ultimagenomics/ugbio_cnv:1.14.0",
-        "hla_la_docker": "ultimagenomics/ugbio_hla_la:1.14.0",
-        "ugbio_mrd_docker": "ultimagenomics/ugbio_mrd:1.15.0",
-        "ugbio_featuremap_docker": "ultimagenomics/ugbio_featuremap:1.17.2",
-        "ugbio_srsnv_docker": "ultimagenomics/ugbio_srsnv:1.16.1",
-        "ugbio_ppmseq_docker": "ultimagenomics/ugbio_ppmseq:1.14.0",
-        "ugbio_freec_docker": "ultimagenomics/ugbio_freec:1.14.0",
-        "ugbio_filtering_docker": "ultimagenomics/ugbio_filtering:1.14.0",
-        "ugbio_comparison_docker": "ultimagenomics/ugbio_comparison:1.12.0",
-        "featuremap_docker": "ultimagenomics/featuremap:master_54894f4",
-        "ug_jalign_docker": "ultimagenomics/jalign:1.2.1",
-        "mosdepth_docker": "quay.io/biocontainers/mosdepth:0.3.3--h37c5b7d_2"
+        "ugbio_core_docker": "ultimagenomics/ugbio_core:1.18.0",
+        "ugbio_featuremap_docker": "ultimagenomics/ugbio_featuremap:1.18.0",
+        "ugbio_srsnv_docker": "ultimagenomics/ugbio_srsnv:1.18.0",
+        "featuremap_docker": "ultimagenomics/featuremap:master_75f0535"
 }
 }
 

@@ -17,16 +17,13 @@ workflow Globals {
   GlobalVariables glob ={
         "ubuntu_docker": "ubuntu:focal",
         "perl_docker": "perl:5.38",
-        "bcftools_docker": "staphb/bcftools:1.19",
         "monitoring_script": "gs://ultima-ref-files/monitor_1.0.sh",
         "ref_cache_script": "gs://ultima-ref-files/seq_cache_populate.pl",
         "ua_docker": "ultimagenomics/alignment:3.0.6",
-        "giraffe_docker": "ultimagenomics/giraffe:1.47.1",
-        "rematching_docker": "ultimagenomics/rematcher:v1.0.0",
         "trimmer_docker": "ultimagenomics/trimmer:2.3.4",
         "star_docker": "ultimagenomics/star:2.7.10a",
         "sorter_docker": "ultimagenomics/sorter:1.4.15",
-        "ugbio_core_docker": "ultimagenomics/ugbio_core:1.16.1",
+        "ugbio_core_docker": "ultimagenomics/ugbio_core:1.18.0",
         "ugbio_ppmseq_docker": "ultimagenomics/ugbio_ppmseq:1.16.2"
 }
 }

@@ -469,7 +469,9 @@ task DownsampleCramBam {
     input {
         String base_file_name
         File input_cram_bam
+        File? input_cram_bam_index
         Float downsample_frac
+        File? target_regions_bed
         Int? seed 
         String output_format = "cram"
         References references
@@ -486,8 +488,7 @@ task DownsampleCramBam {
     String output_cram_bam_name = base_file_name + output_format_extension
     
     command <<<
-        set -eo pipefail
-        set -o xtrace
+        set -xeo pipefail
 
         bash ~{monitoring_script} | tee monitoring.log >&2 &
 
@@ -504,6 +505,7 @@ task DownsampleCramBam {
           -s ${seed_var}~{downsample_frac} \
           ~{output_format_flag} \
           -T ~{references.ref_fasta} \
+          ~{if defined(target_regions_bed) then "--regions-file ~{target_regions_bed}" else ""} \
           -o ~{output_cram_bam_name} \
           --threads ~{cpus} \
           ~{input_cram_bam}
