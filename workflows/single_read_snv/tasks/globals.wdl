@@ -14,7 +14,7 @@ workflow Globals {
         "ubuntu_docker": "ubuntu:focal",
         "monitoring_script": "gs://ultima-ref-files/monitor_1.0.sh",
         "ugbio_core_docker": "ultimagenomics/ugbio_core:1.18.0",
-        "ugbio_featuremap_docker": "ultimagenomics/ugbio_featuremap:1.18.0",
+        "ugbio_featuremap_docker": "ultimagenomics/ugbio_featuremap:1.20.0",
         "ugbio_srsnv_docker": "ultimagenomics/ugbio_srsnv:1.18.0",
         "featuremap_docker": "ultimagenomics/featuremap:master_75f0535"
 }
