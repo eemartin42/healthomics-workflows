@@ -17,16 +17,16 @@ workflow Globals {
   input {
   GlobalVariables glob ={
         "ubuntu_docker": "ubuntu:focal",
-        "ug_gatk_picard_docker": "ultimagenomics/ug_gatk_picard:0.16",
+        "ug_gatk_picard_docker": "ultimagenomics/ug_gatk_picard:0.16_fixup",
         "broad_gatk_docker": "broadinstitute/gatk:4.6.0.0",
-        "ug_make_examples_docker": "ultimagenomics/make_examples:3.2.1",
+        "ug_make_examples_docker": "ultimagenomics/make_examples:3.3.0",
         "monitoring_script": "s3://ultimagen-workflow-resources-us-east-1/monitor_1.0.sh",
-        "ua_docker": "ultimagenomics/alignment:3.0.6",
-        "giraffe_docker": "ultimagenomics/giraffe:1.71.1",
-        "rematching_docker": "ultimagenomics/rematcher:1.1.1_15f0331",
-        "gridss_docker": "ultimagenomics/gridss:0c97dd1",
+        "ua_docker": "ultimagenomics/alignment:3.0.8",
+        "giraffe_docker": "ultimagenomics/giraffe:1.74.0",
+        "rematching_docker": "ultimagenomics/rematcher:1.1.2_08f0df1",
+        "gridss_docker": "ultimagenomics/gridss:1.0.2",
         "gripss_docker": "ultimagenomics/gripss:ug_2.4.1_165b492",
-        "ugbio_core_docker": "ultimagenomics/ugbio_core:1.18.0"
+        "ugbio_core_docker": "ultimagenomics/ugbio_core:1.28.0"
 }
 }
 

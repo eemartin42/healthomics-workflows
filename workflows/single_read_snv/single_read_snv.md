@@ -27,8 +27,23 @@ The following input templates are available for different kinds of input data:
         <i>String </i> &mdash;
          Base file name for output files. The output files will be named [base_file_name].with_ml_qual.vcf.gz <br />
 </p>
+<p name="SingleReadSNV.num_shards_featuremap">
+        <b>SingleReadSNV.num_shards_featuremap</b><br />
+        <i>Int </i> &mdash;
+         Number of genomic shards to scatter the snvfind (CreateFeatureMap) step across. Higher values reduce wall-clock time but add scatter overhead. <br />
+</p>
+<p name="SingleReadSNV.scatter_interval_list">
+        <b>SingleReadSNV.scatter_interval_list</b><br />
+        <i>File </i> &mdash;
+         Interval list defining the genomic regions to scatter snvfind across. Should match the regions in featuremap_params.bed_file. <br />
+</p>
 
 ### Required parameters
+<p name="SingleReadSNV.train_on_gpu">
+        <b>SingleReadSNV.train_on_gpu</b><br />
+        <i>Boolean </i> &mdash;
+         Train the ML model on GPU, default: false <br />
+</p>
 <p name="SingleReadSNV.featuremap_params">
         <b>SingleReadSNV.featuremap_params</b><br />
         <i>FeatureMapParams </i> &mdash;
@@ -38,11 +53,6 @@ The following input templates are available for different kinds of input data:
         <b>SingleReadSNV.features</b><br />
         <i>Array[String] </i> &mdash;
          Features to be used for training the SNV quality model, should match pre trained model if one is given, recommended value set in the template. <br />
-</p>
-<p name="SingleReadSNV.training_regions_interval_list">
-        <b>SingleReadSNV.training_regions_interval_list</b><br />
-        <i>File </i> &mdash;
-         Genomic regions to include in the training set, the recommended value is set in the template <br />
 </p>
 <p name="SingleReadSNV.xgboost_params_file">
         <b>SingleReadSNV.xgboost_params_file</b><br />
@@ -56,34 +66,44 @@ The following input templates are available for different kinds of input data:
 </p>
 
 ### Required references
-<p name="SingleReadSNV.references">
-        <b>SingleReadSNV.references</b><br />
-        <i>References </i> &mdash;
-         Reference files: fasta, dict and fai, recommended value set in the template <br />
+<p name="SingleReadSNV.annotation_files">
+        <b>SingleReadSNV.annotation_files</b><br />
+        <i>FeaturemapAnnotationFiles </i> &mdash;
+         Annotation files for featuremap generation: dbSNP, gnomAD, and UG High Confidence Regions with their indices <br />
 </p>
 
 ### Optional inputs
 <details>
 <summary> Show/Hide </summary>
-<p name="SingleReadSNV.training_regions_interval_list_index">
-        <b>SingleReadSNV.training_regions_interval_list_index</b><br />
-        <i>File &mdash; Default: None</i><br />
-        Index for genomic regions to exclude from the training set, the recommended value is set in the template
-</p>
 <p name="SingleReadSNV.pre_trained_model_files">
         <b>SingleReadSNV.pre_trained_model_files</b><br />
-        <i>Array[File]? &mdash; Default: None</i><br />
-        Pre-trained ML model json files, if provided the model will be used for inference and no self-trained model will be created. Use with care, the model must be trained on the same data type with the same features
-</p>
-<p name="SingleReadSNV.pre_trained_srsnv_metadata_json">
-        <b>SingleReadSNV.pre_trained_srsnv_metadata_json</b><br />
-        <i>File? &mdash; Default: None</i><br />
-        Pre-trained SNV quality model metadata json file, if provided the model will be used for inference and no self-trained model will be created. Use with care, the model must be trained on the same data type with the same features
+        <i>SingleReadSNVModel? &mdash; Default: None</i><br />
+        Pre-trained ML model json files and .srsnv_metadata.json file. if provided the model will be used for inference and no self-trained model will be created. Use with care, the model must be trained on the same data type with the same features
 </p>
 <p name="SingleReadSNV.raise_exceptions_in_report">
         <b>SingleReadSNV.raise_exceptions_in_report</b><br />
         <i>Boolean &mdash; Default: None</i><br />
         Raise and exception and fail the pipeline if an error is raised in the QC report
+</p>
+<p name="SingleReadSNV.override_memory_gb_CreateFeatureMap">
+        <b>SingleReadSNV.override_memory_gb_CreateFeatureMap</b><br />
+        <i>Int? &mdash; Default: None</i><br />
+        Override memory in GB for the CreateFeatureMap task, default: 2 (GiB). If an out of memory error occurs in the CreateFeatureMap task, try increasing this value, e.g. double it.
+</p>
+<p name="SingleReadSNV.override_memory_gb_PrepareRawFeatureMap">
+        <b>SingleReadSNV.override_memory_gb_PrepareRawFeatureMap</b><br />
+        <i>Int? &mdash; Default: None</i><br />
+        Override memory in GB for the PrepareRawFeatureMap task, default: 128 (GiB). If an out of memory error occurs in the PrepareRawFeatureMap task, try increasing this value, e.g. double it.
+</p>
+<p name="SingleReadSNV.override_memory_gb_PrepareRandomSampleFeatureMap">
+        <b>SingleReadSNV.override_memory_gb_PrepareRandomSampleFeatureMap</b><br />
+        <i>Int? &mdash; Default: None</i><br />
+        Override memory in GB for the PrepareRandomSampleFeatureMap task, default: 16 (GiB). If an out of memory error occurs in the PrepareRandomSampleFeatureMap task, try increasing this value, e.g. double it.
+</p>
+<p name="SingleReadSNV.override_memory_gb_TrainModel">
+        <b>SingleReadSNV.override_memory_gb_TrainModel</b><br />
+        <i>Int? &mdash; Default: None</i><br />
+        Override memory in GB for the TrainModel task, default: 32 (GiB). If an out of memory error occurs in the TrainModel task, try increasing this value, e.g. double it.
 </p>
 
 ### Optional inputs
@@ -92,10 +112,35 @@ The following input templates are available for different kinds of input data:
         <i>Array[File]? </i> &mdash;
          (Optional) Sorter json stats files. Provide EITHER these files OR both mean_coverage and total_aligned_bases. <br />
 </p>
+<p name="SingleReadSNV.reference_genome">
+        <b>SingleReadSNV.reference_genome</b><br />
+        <i>String </i> &mdash;
+         Genome type selector. The workflow currently supports only hg38. <br />
+</p>
 <p name="SingleReadSNV.random_sample_trinuc_freq">
         <b>SingleReadSNV.random_sample_trinuc_freq</b><br />
         <i>File? </i> &mdash;
          (Optional) CSV or TSV file with trinucleotide frequencies for the random sample. If provided, the random sample featuremap will be sampled according to the given trinucleotide frequency. If not provided, sampling is uniform. <br />
+</p>
+<p name="SingleReadSNV.exclude_from_training_field_name">
+        <b>SingleReadSNV.exclude_from_training_field_name</b><br />
+        <i>String </i> &mdash;
+         INFO field name for the exclude-from-training annotation in the featuremap VCF. Default: EXCLUDE_TRAINING <br />
+</p>
+<p name="SingleReadSNV.include_in_inference_field_name">
+        <b>SingleReadSNV.include_in_inference_field_name</b><br />
+        <i>String </i> &mdash;
+         INFO field name for the include-in-inference annotation in the featuremap VCF. Default: INCLUDE_INFERENCE <br />
+</p>
+<p name="SingleReadSNV.pcawg_field_name">
+        <b>SingleReadSNV.pcawg_field_name</b><br />
+        <i>String </i> &mdash;
+         INFO field name for the PCAWG annotation in the featuremap VCF. Default: PCAWG <br />
+</p>
+<p name="SingleReadSNV.include_vcf_bcftools_filter_args">
+        <b>SingleReadSNV.include_vcf_bcftools_filter_args</b><br />
+        <i>String </i> &mdash;
+         Bcftools filter arguments applied to include-in-inference VCFs before annotation. Default: '-f PASS --type snps -m2 -M2' (PASS biallelic SNPs only). Override if your VCFs lack a PASS filter. <br />
 </p>
 <p name="SingleReadSNV.create_md5_checksum_outputs">
         <b>SingleReadSNV.create_md5_checksum_outputs</b><br />
@@ -111,6 +156,66 @@ The following input templates are available for different kinds of input data:
         <b>SingleReadSNV.total_aligned_bases</b><br />
         <i>String? </i> &mdash;
          (Optional) Total aligned bases used for downsampling rate calculation. Provide together with mean_coverage and without sorter_json_stats_file_list. <br />
+</p>
+<p name="SingleReadSNV.FeatureMapPrep.FilterIncludeVcf.base_file_name">
+        <b>SingleReadSNV.FeatureMapPrep.FilterIncludeVcf.base_file_name</b><br />
+        <i>String? </i> &mdash;
+         Base file name for output files. <br />
+</p>
+<p name="SingleReadSNV.FeatureMapPrep.FilterIncludeVcf.exclude_regions">
+        <b>SingleReadSNV.FeatureMapPrep.FilterIncludeVcf.exclude_regions</b><br />
+        <i>Array[File]? </i> &mdash;
+         Regions to exclude from the output vcf. Supported formats are bed, bed.gz, vcf, vcf.gz. VCF exclusion is done using bcftools view -T ^regions, by position and not by ref and alt. <br />
+</p>
+<p name="SingleReadSNV.FeatureMapPrep.FilterIncludeVcf.include_regions">
+        <b>SingleReadSNV.FeatureMapPrep.FilterIncludeVcf.include_regions</b><br />
+        <i>Array[File]? </i> &mdash;
+         Regions to include in the output vcf. Supported formats are bed, bed.gz. Inclusion is done using 'bcftools view -T'. <br />
+</p>
+<p name="SingleReadSNV.FeatureMapPrep.FilterIncludeVcf.disk_size">
+        <b>SingleReadSNV.FeatureMapPrep.FilterIncludeVcf.disk_size</b><br />
+        <i>Int </i> &mdash;
+         Size of the local disk to use for this task, in GB. By default it is calculated from the input file sizes. <br />
+</p>
+<p name="SingleReadSNV.FeatureMapPrep.FilterIncludeVcf.memory_gb">
+        <b>SingleReadSNV.FeatureMapPrep.FilterIncludeVcf.memory_gb</b><br />
+        <i>Int </i> &mdash;
+         Amount of memory to use for this task, in GB. Default is 4 (GB). <br />
+</p>
+<p name="SingleReadSNV.FeatureMapPrep.FilterIncludeVcf.cpus">
+        <b>SingleReadSNV.FeatureMapPrep.FilterIncludeVcf.cpus</b><br />
+        <i>Int </i> &mdash;
+         Number of cpus to use for this task. Default is 4. <br />
+</p>
+<p name="SingleReadSNV.FeatureMapPrepPathB.FilterIncludeVcf.base_file_name">
+        <b>SingleReadSNV.FeatureMapPrepPathB.FilterIncludeVcf.base_file_name</b><br />
+        <i>String? </i> &mdash;
+         Base file name for output files. <br />
+</p>
+<p name="SingleReadSNV.FeatureMapPrepPathB.FilterIncludeVcf.exclude_regions">
+        <b>SingleReadSNV.FeatureMapPrepPathB.FilterIncludeVcf.exclude_regions</b><br />
+        <i>Array[File]? </i> &mdash;
+         Regions to exclude from the output vcf. Supported formats are bed, bed.gz, vcf, vcf.gz. VCF exclusion is done using bcftools view -T ^regions, by position and not by ref and alt. <br />
+</p>
+<p name="SingleReadSNV.FeatureMapPrepPathB.FilterIncludeVcf.include_regions">
+        <b>SingleReadSNV.FeatureMapPrepPathB.FilterIncludeVcf.include_regions</b><br />
+        <i>Array[File]? </i> &mdash;
+         Regions to include in the output vcf. Supported formats are bed, bed.gz. Inclusion is done using 'bcftools view -T'. <br />
+</p>
+<p name="SingleReadSNV.FeatureMapPrepPathB.FilterIncludeVcf.disk_size">
+        <b>SingleReadSNV.FeatureMapPrepPathB.FilterIncludeVcf.disk_size</b><br />
+        <i>Int </i> &mdash;
+         Size of the local disk to use for this task, in GB. By default it is calculated from the input file sizes. <br />
+</p>
+<p name="SingleReadSNV.FeatureMapPrepPathB.FilterIncludeVcf.memory_gb">
+        <b>SingleReadSNV.FeatureMapPrepPathB.FilterIncludeVcf.memory_gb</b><br />
+        <i>Int </i> &mdash;
+         Amount of memory to use for this task, in GB. Default is 4 (GB). <br />
+</p>
+<p name="SingleReadSNV.FeatureMapPrepPathB.FilterIncludeVcf.cpus">
+        <b>SingleReadSNV.FeatureMapPrepPathB.FilterIncludeVcf.cpus</b><br />
+        <i>Int </i> &mdash;
+         Number of cpus to use for this task. Default is 4. <br />
 </p>
 
 ### Optional parameters
@@ -167,21 +272,6 @@ The following input templates are available for different kinds of input data:
         <b>SingleReadSNV.raw_filtered_featuremap_parquet</b><br />
         <i>File?</i><br />
         Filtered parquet dataframe of raw featuremap for training
-</p>
-<p name="SingleReadSNV.raw_featuremap_stats">
-        <b>SingleReadSNV.raw_featuremap_stats</b><br />
-        <i>File?</i><br />
-        Statistics for raw featuremap filtering
-</p>
-<p name="SingleReadSNV.random_sample_filtered_featuremap_parquet">
-        <b>SingleReadSNV.random_sample_filtered_featuremap_parquet</b><br />
-        <i>File?</i><br />
-        Filtered parquet dataframe of random sample featuremap for training
-</p>
-<p name="SingleReadSNV.random_sample_featuremap_stats">
-        <b>SingleReadSNV.random_sample_featuremap_stats</b><br />
-        <i>File?</i><br />
-        Statistics for random sample featuremap filtering
 </p>
 <p name="SingleReadSNV.random_sample_trinuc_freq_stats">
         <b>SingleReadSNV.random_sample_trinuc_freq_stats</b><br />

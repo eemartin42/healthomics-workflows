@@ -1,5 +1,5 @@
 # GermlineCNVPipeline
-Runs: <br>1. single sample germline CNV calling workflow based on [cn.mops](https://bioconductor.org/packages/release/bioc/html/cn.mops.html)<br>2. cnvpytor workflow<br> 3. combines results, verifies them using split reads and jump alignments<br>4. Applies ML model to estimate quality of the CNV</b>
+Runs: <br>1. single sample germline CNV calling workflow based on [cn.mops](https://bioconductor.org/packages/release/bioc/html/cn.mops.html)<br>2. cnvpytor workflow<br> 3. combines results, verifies them using split reads and jump alignments<br>4. Applies ML model to estimate quality of the CNV<br>5. If given - combines the CNV calls with SV calls</b>
 
 ## Inputs
 
@@ -23,11 +23,6 @@ Runs: <br>1. single sample germline CNV calling workflow based on [cn.mops](http
         <b>GermlineCNVPipeline.bed_graph</b><br />
         <i>Array[File] </i> &mdash;
          Previously calculated input bedGraph files holding the coverage per base (outputs with the sequencing data). <br />
-</p>
-<p name="GermlineCNVPipeline.genome_windows">
-        <b>GermlineCNVPipeline.genome_windows</b><br />
-        <i>File </i> &mdash;
-         Bed file of the genome binned to equal sized windows similar to the cohort_reads_count_matrix. <br />
 </p>
 <p name="GermlineCNVPipeline.cohort_reads_count_matrix">
         <b>GermlineCNVPipeline.cohort_reads_count_matrix</b><br />
@@ -58,15 +53,10 @@ Runs: <br>1. single sample germline CNV calling workflow based on [cn.mops](http
 </p>
 
 ### Required references
-<p name="GermlineCNVPipeline.reference_genome">
-        <b>GermlineCNVPipeline.reference_genome</b><br />
-        <i>File </i> &mdash;
-         Genome fasta file associated with the CRAM file <br />
-</p>
-<p name="GermlineCNVPipeline.reference_genome_index">
-        <b>GermlineCNVPipeline.reference_genome_index</b><br />
-        <i>File </i> &mdash;
-         Fai index of the fasta file <br />
+<p name="GermlineCNVPipeline.reference">
+        <b>GermlineCNVPipeline.reference</b><br />
+        <i>References </i> &mdash;
+         Genome reference object <br />
 </p>
 
 ### Optional inputs
@@ -79,6 +69,16 @@ Runs: <br>1. single sample germline CNV calling workflow based on [cn.mops](http
         <b>GermlineCNVPipeline.filtering_model</b><br />
         <i>File? </i> &mdash;
          CNV filtering model, default in template, calls are not filtered if not provided <br />
+</p>
+<p name="GermlineCNVPipeline.sv_calls_vcf">
+        <b>GermlineCNVPipeline.sv_calls_vcf</b><br />
+        <i>File? </i> &mdash;
+         SV calls in VCF format (MANTA-like, single record per SV call) to be used for annotation of combined CNV calls, default is empty and annotation is not performed.<br> The input tested is the output of structrual_variant_pipeline.wdl <br />
+</p>
+<p name="GermlineCNVPipeline.sv_calls_vcf_index">
+        <b>GermlineCNVPipeline.sv_calls_vcf_index</b><br />
+        <i>File? </i> &mdash;
+         Index file for the SV calls VCF <br />
 </p>
 <p name="GermlineCNVPipeline.create_md5_checksum_outputs">
         <b>GermlineCNVPipeline.create_md5_checksum_outputs</b><br />
@@ -186,13 +186,23 @@ Runs: <br>1. single sample germline CNV calling workflow based on [cn.mops](http
         <i>File</i><br />
         Index of the combined CNV calls in vcf format
 </p>
-<p name="GermlineCNVPipeline.combine_read_evidence">
-        <b>GermlineCNVPipeline.combine_read_evidence</b><br />
+<p name="GermlineCNVPipeline.split_read_evidence">
+        <b>GermlineCNVPipeline.split_read_evidence</b><br />
+        <i>File</i><br />
+        BAM file with split read evidence supporting combined CNV calls
+</p>
+<p name="GermlineCNVPipeline.split_read_evidence_index">
+        <b>GermlineCNVPipeline.split_read_evidence_index</b><br />
+        <i>File</i><br />
+        Index file for the BAM with split read evidence supporting combined CNV calls
+</p>
+<p name="GermlineCNVPipeline.realign_read_evidence">
+        <b>GermlineCNVPipeline.realign_read_evidence</b><br />
         <i>File</i><br />
         BAM file with read evidence supporting combined CNV calls
 </p>
-<p name="GermlineCNVPipeline.combine_read_evidence_index">
-        <b>GermlineCNVPipeline.combine_read_evidence_index</b><br />
+<p name="GermlineCNVPipeline.realign_read_evidence_index">
+        <b>GermlineCNVPipeline.realign_read_evidence_index</b><br />
         <i>File</i><br />
         Index file for the BAM with read evidence supporting combined CNV calls
 </p>

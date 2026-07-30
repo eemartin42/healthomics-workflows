@@ -33,33 +33,18 @@ Performs variant calling on an input cram, using a re-write of (DeepVariant)[htt
 </p>
 
 ### Required references
-<p name="EfficientDV.references">
-        <b>EfficientDV.references</b><br />
-        <i>References </i> &mdash;
-         Reference files: fasta, dict and fai, recommended value set in the template <br />
-</p>
 <p name="EfficientDV.model_onnx">
         <b>EfficientDV.model_onnx</b><br />
         <i>File </i> &mdash;
          TensorRT model for calling variants (onnx format) <br />
 </p>
-<p name="EfficientDV.exome_intervals">
-        <b>EfficientDV.exome_intervals</b><br />
-        <i>File </i> &mdash;
-         A bed file with exome intervals. Used at the post-processing step to annotate the vcf and modify the FILTER of variants in the exome. <br />
-</p>
-<p name="EfficientDV.ref_dbsnp">
-        <b>EfficientDV.ref_dbsnp</b><br />
-        <i>File </i> &mdash;
-         DbSNP vcf for the annotation of known variants <br />
-</p>
-<p name="EfficientDV.ref_dbsnp_index">
-        <b>EfficientDV.ref_dbsnp_index</b><br />
-        <i>File </i> &mdash;
-         DbSNP vcf index <br />
-</p>
 
 ### Optional inputs
+<p name="EfficientDV.reference_genome">
+        <b>EfficientDV.reference_genome</b><br />
+        <i>String </i> &mdash;
+         Genome selector: hg38, b37, hg38_taps, hg38_nist_v3, hg38_nist_v3_with_decoy, hg38_no_alt, mm10, mm39. Default to hg38 <br />
+</p>
 <p name="EfficientDV.background_cram_files">
         <b>EfficientDV.background_cram_files</b><br />
         <i>Array[File] </i> &mdash;
@@ -70,6 +55,11 @@ Performs variant calling on an input cram, using a re-write of (DeepVariant)[htt
         <i>Array[File] </i> &mdash;
          Background (normal sample) cram index files for somatic calling <br />
 </p>
+<p name="EfficientDV.ScatterIntervalList.convert_to_bed">
+        <b>EfficientDV.ScatterIntervalList.convert_to_bed</b><br />
+        <i>Boolean? </i> &mdash;
+         If true, convert interval_list files to BED format in addition to interval_list format <br />
+</p>
 
 ### Optional parameters
 <p name="EfficientDV.show_bg_fields">
@@ -77,20 +67,25 @@ Performs variant calling on an input cram, using a re-write of (DeepVariant)[htt
         <i>Boolean </i> &mdash;
          Show background fields in the output vcf. Default: false. Mostly relevant for somatic calling. <br />
 </p>
+<p name="EfficientDV.run_haplotype_sampling">
+        <b>EfficientDV.run_haplotype_sampling</b><br />
+        <i>Boolean </i> &mdash;
+         Whether to run haplotype sampling to create pangenome haplotypes. Default: false <br />
+</p>
 <p name="EfficientDV.scatter_intervals_break">
         <b>EfficientDV.scatter_intervals_break</b><br />
         <i>Int </i> &mdash;
          The length of the intervals for parallelization are multiples of scatter_intervals_break. This is also the maximal length of the intervals. <br />
 </p>
-<p name="EfficientDV.target_intervals">
-        <b>EfficientDV.target_intervals</b><br />
+<p name="EfficientDV.override_target_intervals">
+        <b>EfficientDV.override_target_intervals</b><br />
         <i>File? </i> &mdash;
-         Limit calling to these regions. If target_intervals and intervals_string are not provided then entire genome is used. <br />
+         Override default genome-specific target intervals. If not provided, uses genome-specific default intervals. <br />
 </p>
 <p name="EfficientDV.intervals_string">
         <b>EfficientDV.intervals_string</b><br />
         <i>String? </i> &mdash;
-         Regions for variant calling, in the format chrom:start-end. Multiple regions are separated by semi-colon. hese regions. Takes precedence over target_intervals. If both are not provided then entire genome is used. <br />
+         Regions for variant calling, in the format chrom:start-end. Multiple regions are separated by semi-colon. Takes precedence over override_target_intervals. <br />
 </p>
 <p name="EfficientDV.min_fraction_hmer_indels">
         <b>EfficientDV.min_fraction_hmer_indels</b><br />
@@ -127,15 +122,10 @@ Performs variant calling on an input cram, using a re-write of (DeepVariant)[htt
         <i>Int </i> &mdash;
          Minimal base quality for candidate generation <br />
 </p>
-<p name="EfficientDV.pileup_min_mapping_quality">
-        <b>EfficientDV.pileup_min_mapping_quality</b><br />
+<p name="EfficientDV.min_mapping_quality">
+        <b>EfficientDV.min_mapping_quality</b><br />
         <i>Int </i> &mdash;
-         Minimal mapping quality to be included in image (the input to the CNN) <br />
-</p>
-<p name="EfficientDV.candidate_min_mapping_quality">
-        <b>EfficientDV.candidate_min_mapping_quality</b><br />
-        <i>Int </i> &mdash;
-         Minimal mapping quality for candidate generation <br />
+         Minimum mapping quality for reads to appear in pileup images (input to CNN) and to be considered as supporting an alt-allele in candidate generation <br />
 </p>
 <p name="EfficientDV.min_hmer_plus_one_candidate">
         <b>EfficientDV.min_hmer_plus_one_candidate</b><br />
@@ -156,6 +146,21 @@ Performs variant calling on an input cram, using a re-write of (DeepVariant)[htt
         <b>EfficientDV.prioritize_alt_supporting_reads</b><br />
         <i>Boolean </i> &mdash;
          Generate an image with all available alt-supporting reads, and only then add non-supporting reads <br />
+</p>
+<p name="EfficientDV.active_areas_min_base_quality">
+        <b>EfficientDV.active_areas_min_base_quality</b><br />
+        <i>Int </i> &mdash;
+         Minimum base quality for active areas detection <br />
+</p>
+<p name="EfficientDV.prioritize_high_quality_reads">
+        <b>EfficientDV.prioritize_high_quality_reads</b><br />
+        <i>Boolean </i> &mdash;
+         When min-mapq=0, add mapq=0 reads last, only filling remaining image capacity after high-mapq reads <br />
+</p>
+<p name="EfficientDV.trim_soft_clips">
+        <b>EfficientDV.trim_soft_clips</b><br />
+        <i>Boolean </i> &mdash;
+         Trim soft-clipped bases from pileup images <br />
 </p>
 <p name="EfficientDV.p_error">
         <b>EfficientDV.p_error</b><br />
@@ -202,6 +207,21 @@ Performs variant calling on an input cram, using a re-write of (DeepVariant)[htt
         <i>File? </i> &mdash;
          Optional pangenome haplotypes cram index file <br />
 </p>
+<p name="EfficientDV.num_haplotypes">
+        <b>EfficientDV.num_haplotypes</b><br />
+        <i>Int? </i> &mdash;
+         Number of haplotypes to sample from the pangenome graph (must fit the model) <br />
+</p>
+<p name="EfficientDV.include_reference_in_haplotypes">
+        <b>EfficientDV.include_reference_in_haplotypes</b><br />
+        <i>Boolean? </i> &mdash;
+         Include the reference sequence in the sampled haplotypes (must fit the model) <br />
+</p>
+<p name="EfficientDV.diploid_sampling_in_haplotypes">
+        <b>EfficientDV.diploid_sampling_in_haplotypes</b><br />
+        <i>Boolean? </i> &mdash;
+         Use diploid sampling strategy for haplotype selection (must fit the model) <br />
+</p>
 <p name="EfficientDV.optimization_level">
         <b>EfficientDV.optimization_level</b><br />
         <i>Int? </i> &mdash;
@@ -215,12 +235,12 @@ Performs variant calling on an input cram, using a re-write of (DeepVariant)[htt
 <p name="EfficientDV.strong_call_threshold">
         <b>EfficientDV.strong_call_threshold</b><br />
         <i>Float </i> &mdash;
-         Threshold for boundary call. If ensemble_size > 0 boundary calls will be re-called using ensemble inference <br />
+         Probability threshold for selective ensemble inference. When ensemble_size >= 2, examples with max probability below this threshold are re-evaluated using ensemble inference; examples above it are accepted as-is. <br />
 </p>
 <p name="EfficientDV.ensemble_size">
         <b>EfficientDV.ensemble_size</b><br />
         <i>Int </i> &mdash;
-         Size of the ensemble for inference <br />
+         Number of augmented passes for ensemble inference. Values <= 1 disable ensemble entirely (no augmentation is applied); values >= 2 enable selective ensemble. <br />
 </p>
 <p name="EfficientDV.ensemble_reference_rows">
         <b>EfficientDV.ensemble_reference_rows</b><br />
@@ -287,9 +307,9 @@ Performs variant calling on an input cram, using a re-write of (DeepVariant)[htt
         <i>String? </i> &mdash;
          Flow order. If not provided, it will be extracted from the CRAM header <br />
 </p>
-<p name="EfficientDV.call_variants_gpu_type">
-        <b>EfficientDV.call_variants_gpu_type</b><br />
-        <i>String </i> &mdash;
+<p name="EfficientDV.call_variants_gpu_type_override">
+        <b>EfficientDV.call_variants_gpu_type_override</b><br />
+        <i>String? </i> &mdash;
          GPU type for call variants <br />
 </p>
 <p name="EfficientDV.call_variants_gpus">
@@ -312,8 +332,73 @@ Performs variant calling on an input cram, using a re-write of (DeepVariant)[htt
         <i>Int </i> &mdash;
          Memory buffer allocated for each uncompression thread in calll_variants <br />
 </p>
+<p name="EfficientDV.v_gpu_tile_size">
+        <b>EfficientDV.v_gpu_tile_size</b><br />
+        <i>Int </i> &mdash;
+         Virtual GPU tile size for call_variants <br />
+</p>
+<p name="EfficientDV.HaplotypeSampling.input_fastq">
+        <b>EfficientDV.HaplotypeSampling.input_fastq</b><br />
+        <i>File? </i> &mdash;
+         Optional input FASTQ file (if not using CRAM) <br />
+</p>
+<p name="EfficientDV.HaplotypeSampling.kmer_length">
+        <b>EfficientDV.HaplotypeSampling.kmer_length</b><br />
+        <i>Int </i> &mdash;
+         K-mer length for KMC counting (default: 29) <br />
+</p>
+<p name="EfficientDV.HaplotypeSampling.min_kmer_count">
+        <b>EfficientDV.HaplotypeSampling.min_kmer_count</b><br />
+        <i>Int </i> &mdash;
+         Minimum k-mer count threshold for sampling (default: 2) <br />
+</p>
+<p name="EfficientDV.HaplotypeSampling.window_size">
+        <b>EfficientDV.HaplotypeSampling.window_size</b><br />
+        <i>Int </i> &mdash;
+         Sliding window size for seqkit (default: 50000) <br />
+</p>
+<p name="EfficientDV.HaplotypeSampling.step_size">
+        <b>EfficientDV.HaplotypeSampling.step_size</b><br />
+        <i>Int </i> &mdash;
+         Sliding window step size for seqkit (default: 50000) <br />
+</p>
+<p name="EfficientDV.HaplotypeSampling.minimap2_preset">
+        <b>EfficientDV.HaplotypeSampling.minimap2_preset</b><br />
+        <i>String </i> &mdash;
+         Minimap2 preset for alignment (default: asm5) <br />
+</p>
+<p name="EfficientDV.HaplotypeSampling.cram_to_fastq_cores">
+        <b>EfficientDV.HaplotypeSampling.cram_to_fastq_cores</b><br />
+        <i>Int </i> &mdash;
+         Number of CPU cores for CRAM to FASTQ conversion (default: 2) <br />
+</p>
+<p name="EfficientDV.HaplotypeSampling.kmc_mem_gb">
+        <b>EfficientDV.HaplotypeSampling.kmc_mem_gb</b><br />
+        <i>Int </i> &mdash;
+         Memory (GB) for KMC k-mer counting (default: 64) <br />
+</p>
+<p name="EfficientDV.HaplotypeSampling.kmc_cores">
+        <b>EfficientDV.HaplotypeSampling.kmc_cores</b><br />
+        <i>Int </i> &mdash;
+         Number of CPU cores for KMC (default: 16) <br />
+</p>
+<p name="EfficientDV.HaplotypeSampling.minimap_extra_args">
+        <b>EfficientDV.HaplotypeSampling.minimap_extra_args</b><br />
+        <i>String? </i> &mdash;
+         Additional extra arguments to pass to minimap2 (default: empty) <br />
+</p>
 
 ### Optional reference files
+<p name="EfficientDV.ref_gbz_for_haplotypes">
+        <b>EfficientDV.ref_gbz_for_haplotypes</b><br />
+        <i>File? </i> &mdash;
+         Pangenome GBZ index file for haplotype sampling (required if run_haplotype_sampling is true and pangenome_haplotypes is not provided) <br />
+</p>
+<p name="EfficientDV.ref_hapl">
+        <b>EfficientDV.ref_hapl</b><br />
+        <i>File? </i> &mdash;
+         Pre-computed haplotype index file (.hapl) for haplotype sampling (required if run_haplotype_sampling is true and pangenome_haplotypes is not provided) <br />
+</p>
 <p name="EfficientDV.model_serialized">
         <b>EfficientDV.model_serialized</b><br />
         <i>File? </i> &mdash;
@@ -323,6 +408,16 @@ Performs variant calling on an input cram, using a re-write of (DeepVariant)[htt
         <b>EfficientDV.annotation_intervals</b><br />
         <i>Array[File]? </i> &mdash;
          List of bed files for VCF annotation <br />
+</p>
+<p name="EfficientDV.ref_dbsnp">
+        <b>EfficientDV.ref_dbsnp</b><br />
+        <i>File? </i> &mdash;
+         DbSNP vcf for the annotation of known variants <br />
+</p>
+<p name="EfficientDV.ref_dbsnp_index">
+        <b>EfficientDV.ref_dbsnp_index</b><br />
+        <i>File? </i> &mdash;
+         DbSNP vcf index <br />
 </p>
 </details>
 
@@ -357,11 +452,6 @@ Performs variant calling on an input cram, using a re-write of (DeepVariant)[htt
         <b>EfficientDV.call_variants_output_tfrecords</b><br />
         <i>Array[File]?</i><br />
         The tfrecords that call_variants outputs
-</p>
-<p name="EfficientDV.call_variants_output_tfrecords_final">
-        <b>EfficientDV.call_variants_output_tfrecords_final</b><br />
-        <i>Array[File]?</i><br />
-        The final merged tfrecord that call_variants outputs
 </p>
 <p name="EfficientDV.output_gvcf">
         <b>EfficientDV.output_gvcf</b><br />
@@ -417,16 +507,6 @@ Performs variant calling on an input cram, using a re-write of (DeepVariant)[htt
         <b>EfficientDV.num_candidates_as_int</b><br />
         <i>Int</i><br />
         Number of candidates that call_variants processed (as an integer)
-</p>
-<p name="EfficientDV.num_weak_candidates">
-        <b>EfficientDV.num_weak_candidates</b><br />
-        <i>Array[File]</i><br />
-        Number of weak candidates that were re-called with ensemble inference
-</p>
-<p name="EfficientDV.num_weak_candidates_as_int">
-        <b>EfficientDV.num_weak_candidates_as_int</b><br />
-        <i>Int</i><br />
-        Number of weak candidates that were re-called with ensemble inference (as an integer)
 </p>
 
 <hr />

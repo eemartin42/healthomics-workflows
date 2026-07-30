@@ -92,6 +92,15 @@ This pipeline describes step #3, the intersection and MRD data analysis, once #1
 </p>
 
 ### Optional inputs
+<details>
+<summary> Show/Hide </summary>
+<p name="MRDFeatureMap.override_memory_gb_FeatureMapIntersect">
+        <b>MRDFeatureMap.override_memory_gb_FeatureMapIntersect</b><br />
+        <i>Int? &mdash; Default: None</i><br />
+        Override memory in GB for the FeatureMapIntersectXXXX tasks, default: 4 (GiB). If an out of memory error occurs in the these tasks, try increasing this value, e.g. double it.
+</p>
+
+### Optional inputs
 <p name="MRDFeatureMap.external_matched_signatures">
         <b>MRDFeatureMap.external_matched_signatures</b><br />
         <i>Array[File]? </i> &mdash;
@@ -117,10 +126,10 @@ This pipeline describes step #3, the intersection and MRD data analysis, once #1
         <i>Int? </i> &mdash;
          Number of synthetic signatures to generate from the somatic mutation database. Set to 0 to disable generation of control signatures from the database. <br />
 </p>
-<p name="MRDFeatureMap.memory_extract_coverage_override">
-        <b>MRDFeatureMap.memory_extract_coverage_override</b><br />
+<p name="MRDFeatureMap.override_memory_gb_ExtractCoverageOverVcfFiles">
+        <b>MRDFeatureMap.override_memory_gb_ExtractCoverageOverVcfFiles</b><br />
         <i>Int? </i> &mdash;
-         Memory in GB to use for the coverage extraction task <br />
+         Override memory in GB for the ExtractCoverageOverVcfFiles task, default: 8 (GiB). If an out of memory error occurs in the ExtractCoverageOverVcfFiles task, try increasing this value, e.g. double it. <br />
 </p>
 <p name="MRDFeatureMap.create_md5_checksum_outputs">
         <b>MRDFeatureMap.create_md5_checksum_outputs</b><br />
@@ -194,10 +203,20 @@ This pipeline describes step #3, the intersection and MRD data analysis, once #1
 </p>
 
 ### Optional reference files
-<p name="MRDFeatureMap.exclude_regions">
-        <b>MRDFeatureMap.exclude_regions</b><br />
+<p name="MRDFeatureMap.exclude_regions_bed">
+        <b>MRDFeatureMap.exclude_regions_bed</b><br />
         <i>Array[File] </i> &mdash;
-         Genomic regions to exclude from the analysis, bed and vcf[.gz] files are accepted <br />
+         BED regions to exclude from the analysis (position-based filtering) <br />
+</p>
+<p name="MRDFeatureMap.exclude_regions_vcf">
+        <b>MRDFeatureMap.exclude_regions_vcf</b><br />
+        <i>Array[File] </i> &mdash;
+         VCF files to exclude from signatures by exact locus and alt allele (e.g. dbSNP, GNOMAD, panel-of-normals). Must be bgzipped and tabix-indexed. <br />
+</p>
+<p name="MRDFeatureMap.exclude_regions_vcf_indices">
+        <b>MRDFeatureMap.exclude_regions_vcf_indices</b><br />
+        <i>Array[File] </i> &mdash;
+         Respective tabix indices for exclude_regions_vcf (same order). <br />
 </p>
 </details>
 

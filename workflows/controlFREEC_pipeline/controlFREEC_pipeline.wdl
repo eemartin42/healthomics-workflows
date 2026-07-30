@@ -32,7 +32,7 @@ import "tasks/cnv_calling_tasks.wdl" as CnvTasks
 
 workflow SomaticCNVCallingControlFREEC{
     input{
-        String pipeline_version = "1.28.1" # !UnusedDeclaration
+        String pipeline_version = "1.33.0" # !UnusedDeclaration
         String base_file_name
 
         # input bam files need to be supplied even if coverage and pileup are supplied externally.
@@ -140,7 +140,7 @@ workflow SomaticCNVCallingControlFREEC{
     }
 
     meta {
-        description: "Runs single sample somatic CNV calling workflow based on [ControlFREEC](https://boevalab.inf.ethz.ch/FREEC/).\n\nCNVs are called based on both coverage and allele frequencies in the tumor and the matched germline sample.\n\nThe pipeline will gather coverage and allele frequencies, run controlFREEC and filter called CNVs by length and low confidence regions.\n\ncoverage will be calculted based on the input cram/bam. Alternativley, it can recieve coverage input as one of:bedGraph, cpn formats.\n\nAllele frequencies will be calculated based on the input cram/bam and a given vcf file to specify locations. Alternativley, it can recieve precalculated frequencies as mpileup format.\n\nPipeline has an option to run in High-Sensitivity-Mode which can be used for low tumor purity samples. in this case segmentation results will be outputed and filtered by their average fold change.\n\nfor High-Sensitivity-Mode fold changes for gain and loss calls can be defined by the user. (default cutoff values are [gain,loss]=[1.03,0.97])\n\nThe pipeline outputs: \n\n&nbsp;&nbsp;- calculated coverage for tumor and normal samples\n\n&nbsp;&nbsp;- calculated mpileup for tumor and normal samples\n\n&nbsp;&nbsp;- called CNVs + filtered called CNVs\n\n&nbsp;&nbsp;- controlFREEC run-summary\n\n&nbsp;&nbsp;-coverage plot that shows normalized (log scale) coverage along the genome for the germline and tumor samples.\n\n&nbsp;&nbsp;-duplications and deletions figure - showing gains and losses along the genome.\n\n&nbsp;&nbsp;-copy-number figure  shows the copy number along the genome.\n\n<b>When Running in AWS HealthOmics this pipeline should run with</b> [static storage](https://docs.omics.ai/products/workbench/engines/parameters/aws-healthomics#storage_type-dynamic-or-static)\n\n<u>available templeates:</u>\n\n&nbsp;&nbsp;- controlFREEC_pipeline_bedGraph_input_template.json - use in case you have both .cram and _1.bedgraph input files.\n\n&nbsp;&nbsp;- controlFREEC_pipeline_bedGraph_and_mpileup_input_template.json - use in case you have both _1.bedgraph and precalculated .mpileup input files.\n\n&nbsp;&nbsp;- controlFREEC_pipeline_template.json - use in case you have only .cram input files.\n\n&nbsp;&nbsp;- controlFREEC_pipeline_high_sensitivity_mode_template.json - used for low tumor purity samples.\n\n"
+        description: "Runs single sample somatic CNV calling workflow based on [ControlFREEC](https://boevalab.inf.ethz.ch/FREEC/).\n\nCNVs are called based on both coverage and allele frequencies in the tumor and the matched germline sample.\n\nThe pipeline will gather coverage and allele frequencies, run controlFREEC and filter called CNVs by length and low confidence regions.\n\ncoverage will be calculted based on the input cram/bam. Alternativley, it can recieve coverage input as one of:bedGraph, cpn formats.\n\nAllele frequencies will be calculated based on the input cram/bam and a given vcf file to specify locations. Alternativley, it can recieve precalculated frequencies as mpileup format.\n\nPipeline has an option to run in High-Sensitivity-Mode which can be used for low tumor purity samples. in this case segmentation results will be outputed and filtered by their average fold change.\n\nfor High-Sensitivity-Mode fold changes for gain and loss calls can be defined by the user. (default cutoff values are [gain,loss]=[1.03,0.97])\n\nThe pipeline outputs: \n\n&nbsp;&nbsp;- calculated coverage for tumor and normal samples\n\n&nbsp;&nbsp;- calculated mpileup for tumor and normal samples\n\n&nbsp;&nbsp;- called CNVs + filtered called CNVs\n\n&nbsp;&nbsp;- controlFREEC run-summary\n\n&nbsp;&nbsp;-coverage plot that shows normalized (log scale) coverage along the genome for the germline and tumor samples.\n\n&nbsp;&nbsp;-duplications and deletions figure - showing gains and losses along the genome.\n\n&nbsp;&nbsp;-copy-number figure  shows the copy number along the genome.\n\n<u>available templeates:</u>\n\n&nbsp;&nbsp;- controlFREEC_pipeline_bedGraph_input_template.json - use in case you have both .cram and _1.bedgraph input files.\n\n&nbsp;&nbsp;- controlFREEC_pipeline_bedGraph_and_mpileup_input_template.json - use in case you have both _1.bedgraph and precalculated .mpileup input files.\n\n&nbsp;&nbsp;- controlFREEC_pipeline_template.json - use in case you have only .cram input files.\n\n&nbsp;&nbsp;- controlFREEC_pipeline_high_sensitivity_mode_template.json - used for low tumor purity samples.\n\n"
         author: "Ultima Genomics"
         WDL_AID: {
             exclude: ["pipeline_version",
@@ -393,6 +393,16 @@ workflow SomaticCNVCallingControlFREEC{
             type: "File",
             category: "output"
         }
+        tumor_CNVs_annotated_vcf : {
+            help: "Called CNVs for tumor sample in VCF format with annotations and filters",
+            type: "File",
+            category: "output"
+        }
+        tumor_CNVs_annotated_vcf_index : {
+            help: "Index file for the annotated CNVs VCF",
+            type: "File",
+            category: "output"
+        }
         tumor_CNVs_filtered_bed_file : {
             help: "Filtered called CNVs for tumor sample",
             type: "File",
@@ -485,7 +495,7 @@ workflow SomaticCNVCallingControlFREEC{
 
     Boolean run_createMpileup = !(defined(normal_mpileup_override))
     Boolean run_bedgraph_to_cpn = !(defined(normal_coverage_cpn))
-    Boolean run_collect_coverage = length(select_all([normal_coverage_cpn,normal_sorter_zipped_bed_graph])) == 0
+    Boolean run_collect_coverage = !defined(normal_coverage_cpn) && !defined(normal_sorter_zipped_bed_graph)
     Array[String] collect_coverage_region_for_cov_collection = select_first([collect_coverage_region,[""]])
     
 
@@ -759,6 +769,8 @@ workflow SomaticCNVCallingControlFREEC{
          File controlFREEC_info = runControlFREEC.controlFREEC_info
          File tumor_ratio_bedgraph = runControlFREEC.tumor_ratio_bedgraph
          File tumor_CNVs_annotated_bed_file = CnvVcfToBed.output_cnv_bed
+         File tumor_CNVs_annotated_vcf = ControlFREECCnvsVcf.annotated_cnv_vcf
+         File tumor_CNVs_annotated_vcf_index = ControlFREECCnvsVcf.annotated_cnv_vcf_index
          File tumor_CNVs_filtered_bed_file =  FilterControlFREECCnvs.sample_cnvs_filtered_bed
          File coverage_plot = FilterControlFREECCnvs.coverage_plot
          File dup_del_plot = FilterControlFREECCnvs.dup_del_plot
@@ -767,7 +779,7 @@ workflow SomaticCNVCallingControlFREEC{
          File neutral_AF_bed = FilterControlFREECCnvs.neutral_AF_bed
 
          File? FREEC_normal_BAF = FREEC_normal_BAF_maybe
-         File? FREEC_tumor_BAF = FREEC_tumor_BAF_maybe
+         File? FREEC_tumor_BAF = runControlFREEC.tumor_BAF
          File? FREEC_tumor_CNVs = FREEC_tumor_CNVs_maybe
          File? FREEC_normal_CNVs = FREEC_normal_CNVs_maybe
          File? FREEC_noraml_ratio_bedgraph = FREEC_noraml_ratio_bedgraph_maybe
@@ -815,7 +827,7 @@ CODE
     runtime {
         disks: "local-disk " + ceil(disk_size) + " HDD"
         docker: docker
-        cpu:1
+        cpu: 1
     }
 
 }

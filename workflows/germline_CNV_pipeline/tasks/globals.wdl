@@ -2,6 +2,7 @@ version 1.0
 
 struct GlobalVariables {
   String ubuntu_docker
+  String broad_gatk_docker
   String bcftools_docker
   String monitoring_script
   String ugbio_core_docker
@@ -12,11 +13,12 @@ workflow Globals {
   input {
   GlobalVariables glob ={
         "ubuntu_docker": "ubuntu:focal",
+        "broad_gatk_docker": "broadinstitute/gatk:4.6.0.0",
         "bcftools_docker": "staphb/bcftools:1.19",
         "monitoring_script": "s3://ultimagen-workflow-resources-us-east-1/monitor_1.0.sh",
-        "ugbio_core_docker": "ultimagenomics/ugbio_core:1.18.0",
-        "ugbio_cnv_docker": "ultimagenomics/ugbio_cnv:1.21.1",
-        "ugbio_filtering_docker": "ultimagenomics/ugbio_filtering:1.21.0"
+        "ugbio_core_docker": "ultimagenomics/ugbio_core:1.28.0",
+        "ugbio_cnv_docker": "ultimagenomics/ugbio_cnv:1.28.1",
+        "ugbio_filtering_docker": "ultimagenomics/ugbio_filtering:1.28.0"
 }
 }
 

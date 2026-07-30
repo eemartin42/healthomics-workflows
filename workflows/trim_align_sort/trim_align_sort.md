@@ -9,11 +9,6 @@ Pipeline for trimming, aligning and sorting Ultima data in a fast, cost-effectiv
         <i>Array[File] </i> &mdash;
          List of input cram or bam files to be processed. <br />
 </p>
-<p name="TrimAlignSort.ref_fastas_cram">
-        <b>TrimAlignSort.ref_fastas_cram</b><br />
-        <i>Array[File] </i> &mdash;
-         List of references for CreateReferenceCache task. <br />
-</p>
 <p name="TrimAlignSort.base_file_name">
         <b>TrimAlignSort.base_file_name</b><br />
         <i>String </i> &mdash;
@@ -24,11 +19,6 @@ Pipeline for trimming, aligning and sorting Ultima data in a fast, cost-effectiv
         <i>TrimAlignSortSteps </i> &mdash;
          Steps to be executed in the pipeline.Options are: trim, align, sort <br />
 </p>
-<p name="TrimAlignSort.references">
-        <b>TrimAlignSort.references</b><br />
-        <i>References </i> &mdash;
-         References for merging inputs into one file, alignment, and sorting. <br />
-</p>
 <p name="TrimAlignSort.cpu">
         <b>TrimAlignSort.cpu</b><br />
         <i>Int </i> &mdash;
@@ -36,6 +26,16 @@ Pipeline for trimming, aligning and sorting Ultima data in a fast, cost-effectiv
 </p>
 
 ### Optional inputs
+<p name="TrimAlignSort.ref_fastas_cram">
+        <b>TrimAlignSort.ref_fastas_cram</b><br />
+        <i>Array[File]? </i> &mdash;
+         List of references for CreateReferenceCache task. Optional - if not provided, cache_tarball will not be created. <br />
+</p>
+<p name="TrimAlignSort.reference_genome">
+        <b>TrimAlignSort.reference_genome</b><br />
+        <i>String </i> &mdash;
+         Reference genome selector (hg38, b37, b37_ancient_dna, hg38_taps, hg38_nist_v3, hg38_nist_v3_with_decoy, hg38_no_alt, mm10, mm10_methyl, mm39, hg38_rna_seq). Defaults to hg38 <br />
+</p>
 <p name="TrimAlignSort.trimmer_parameters">
         <b>TrimAlignSort.trimmer_parameters</b><br />
         <i>TrimmerParameters? </i> &mdash;
@@ -44,7 +44,7 @@ Pipeline for trimming, aligning and sorting Ultima data in a fast, cost-effectiv
 <p name="TrimAlignSort.aligner">
         <b>TrimAlignSort.aligner</b><br />
         <i>String? </i> &mdash;
-         Aligner to be used. Options are: ua, ua-meth, star. Mandatory if align step is selected. <br />
+         Aligner to be used. Options are: ua, ua-meth, star, giraffe. Mandatory if align step is selected. <br />
 </p>
 <p name="TrimAlignSort.ua_parameters">
         <b>TrimAlignSort.ua_parameters</b><br />
@@ -55,6 +55,11 @@ Pipeline for trimming, aligning and sorting Ultima data in a fast, cost-effectiv
         <b>TrimAlignSort.ua_meth_parameters</b><br />
         <i>UaMethParameters? </i> &mdash;
          Parameters for the UA meth aligner. Mandatory if aligner is ua-meth. <br />
+</p>
+<p name="TrimAlignSort.giraffe_parameters">
+        <b>TrimAlignSort.giraffe_parameters</b><br />
+        <i>GiraffeParameters? </i> &mdash;
+         Graph reference bundle for the Giraffe aligner + extra parameters for vg giraffe. Mandatory if aligner is giraffe. <br />
 </p>
 <p name="TrimAlignSort.star_genome">
         <b>TrimAlignSort.star_genome</b><br />

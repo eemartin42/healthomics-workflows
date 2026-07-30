@@ -30,18 +30,18 @@ Runs pharmacogenomics analysis on several genes.
          List of references for CreateReferenceCache task. <br />
 </p>
 
-### Required references
-<p name="PyPGx.references">
-        <b>PyPGx.references</b><br />
-        <i>References </i> &mdash;
-         Reference files: fasta, dict and fai <br />
+### Required parameters
+<p name="PyPGx.reference_genome">
+        <b>PyPGx.reference_genome</b><br />
+        <i>String </i> &mdash;
+         Genome type selector. Supported values: hg38, hg38_no_alt, hg38_nist_v3_with_decoy <br />
 </p>
 
 ### Optional inputs
 <p name="PyPGx.input_vcf_file">
         <b>PyPGx.input_vcf_file</b><br />
         <i>File? </i> &mdash;
-         Input VCF file with variants. If not provided, Efficient DV will be run <br />
+         Input VCF file with variants. Use of high quality variants (i.e. PASS). If not provided, Efficient DV will be run <br />
 </p>
 <p name="PyPGx.input_vcf_index_file">
         <b>PyPGx.input_vcf_index_file</b><br />
@@ -53,20 +53,10 @@ Runs pharmacogenomics analysis on several genes.
         <i>File? </i> &mdash;
          TensorRT model for calling variants (onnx format) <br />
 </p>
-<p name="PyPGx.exome_intervals">
-        <b>PyPGx.exome_intervals</b><br />
-        <i>File? </i> &mdash;
-         A bed file with exome intervals. Used at the post-processing step to annotate the vcf and modify the FILTER of variants in the exome. <br />
-</p>
-<p name="PyPGx.ref_dbsnp">
-        <b>PyPGx.ref_dbsnp</b><br />
-        <i>File? </i> &mdash;
-         DbSNP vcf for the annotation of known variants <br />
-</p>
-<p name="PyPGx.ref_dbsnp_index">
-        <b>PyPGx.ref_dbsnp_index</b><br />
-        <i>File? </i> &mdash;
-         DbSNP vcf index <br />
+<p name="PyPGx.EfficientDV.ScatterIntervalList.convert_to_bed">
+        <b>PyPGx.EfficientDV.ScatterIntervalList.convert_to_bed</b><br />
+        <i>Boolean? </i> &mdash;
+         If true, convert interval_list files to BED format in addition to interval_list format <br />
 </p>
 
 ### Optional parameters
@@ -74,6 +64,11 @@ Runs pharmacogenomics analysis on several genes.
         <b>PyPGx.EfficientDV.show_bg_fields</b><br />
         <i>Boolean </i> &mdash;
          Show background fields in the output vcf. Default: false. Mostly relevant for somatic calling. <br />
+</p>
+<p name="PyPGx.EfficientDV.run_haplotype_sampling">
+        <b>PyPGx.EfficientDV.run_haplotype_sampling</b><br />
+        <i>Boolean </i> &mdash;
+         Whether to run haplotype sampling to create pangenome haplotypes. Default: false <br />
 </p>
 <p name="PyPGx.EfficientDV.scatter_intervals_break">
         <b>PyPGx.EfficientDV.scatter_intervals_break</b><br />
@@ -83,7 +78,7 @@ Runs pharmacogenomics analysis on several genes.
 <p name="PyPGx.EfficientDV.intervals_string">
         <b>PyPGx.EfficientDV.intervals_string</b><br />
         <i>String? </i> &mdash;
-         Regions for variant calling, in the format chrom:start-end. Multiple regions are separated by semi-colon. hese regions. Takes precedence over target_intervals. If both are not provided then entire genome is used. <br />
+         Regions for variant calling, in the format chrom:start-end. Multiple regions are separated by semi-colon. Takes precedence over override_target_intervals. <br />
 </p>
 <p name="PyPGx.EfficientDV.min_fraction_hmer_indels">
         <b>PyPGx.EfficientDV.min_fraction_hmer_indels</b><br />
@@ -140,6 +135,16 @@ Runs pharmacogenomics analysis on several genes.
         <i>Boolean </i> &mdash;
          Generate an image with all available alt-supporting reads, and only then add non-supporting reads <br />
 </p>
+<p name="PyPGx.EfficientDV.active_areas_min_base_quality">
+        <b>PyPGx.EfficientDV.active_areas_min_base_quality</b><br />
+        <i>Int </i> &mdash;
+         Minimum base quality for active areas detection <br />
+</p>
+<p name="PyPGx.EfficientDV.trim_soft_clips">
+        <b>PyPGx.EfficientDV.trim_soft_clips</b><br />
+        <i>Boolean </i> &mdash;
+         Trim soft-clipped bases from pileup images <br />
+</p>
 <p name="PyPGx.EfficientDV.p_error">
         <b>PyPGx.EfficientDV.p_error</b><br />
         <i>Float </i> &mdash;
@@ -185,6 +190,21 @@ Runs pharmacogenomics analysis on several genes.
         <i>File? </i> &mdash;
          Optional pangenome haplotypes cram index file <br />
 </p>
+<p name="PyPGx.EfficientDV.num_haplotypes">
+        <b>PyPGx.EfficientDV.num_haplotypes</b><br />
+        <i>Int? </i> &mdash;
+         Number of haplotypes to sample from the pangenome graph (must fit the model) <br />
+</p>
+<p name="PyPGx.EfficientDV.include_reference_in_haplotypes">
+        <b>PyPGx.EfficientDV.include_reference_in_haplotypes</b><br />
+        <i>Boolean? </i> &mdash;
+         Include the reference sequence in the sampled haplotypes (must fit the model) <br />
+</p>
+<p name="PyPGx.EfficientDV.diploid_sampling_in_haplotypes">
+        <b>PyPGx.EfficientDV.diploid_sampling_in_haplotypes</b><br />
+        <i>Boolean? </i> &mdash;
+         Use diploid sampling strategy for haplotype selection (must fit the model) <br />
+</p>
 <p name="PyPGx.EfficientDV.optimization_level">
         <b>PyPGx.EfficientDV.optimization_level</b><br />
         <i>Int? </i> &mdash;
@@ -198,12 +218,12 @@ Runs pharmacogenomics analysis on several genes.
 <p name="PyPGx.EfficientDV.strong_call_threshold">
         <b>PyPGx.EfficientDV.strong_call_threshold</b><br />
         <i>Float </i> &mdash;
-         Threshold for boundary call. If ensemble_size > 0 boundary calls will be re-called using ensemble inference <br />
+         Probability threshold for selective ensemble inference. When ensemble_size >= 2, examples with max probability below this threshold are re-evaluated using ensemble inference; examples above it are accepted as-is. <br />
 </p>
 <p name="PyPGx.EfficientDV.ensemble_size">
         <b>PyPGx.EfficientDV.ensemble_size</b><br />
         <i>Int </i> &mdash;
-         Size of the ensemble for inference <br />
+         Number of augmented passes for ensemble inference. Values <= 1 disable ensemble entirely (no augmentation is applied); values >= 2 enable selective ensemble. <br />
 </p>
 <p name="PyPGx.EfficientDV.ensemble_reference_rows">
         <b>PyPGx.EfficientDV.ensemble_reference_rows</b><br />
@@ -250,9 +270,9 @@ Runs pharmacogenomics analysis on several genes.
         <i>String? </i> &mdash;
          Flow order. If not provided, it will be extracted from the CRAM header <br />
 </p>
-<p name="PyPGx.EfficientDV.call_variants_gpu_type">
-        <b>PyPGx.EfficientDV.call_variants_gpu_type</b><br />
-        <i>String </i> &mdash;
+<p name="PyPGx.EfficientDV.call_variants_gpu_type_override">
+        <b>PyPGx.EfficientDV.call_variants_gpu_type_override</b><br />
+        <i>String? </i> &mdash;
          GPU type for call variants <br />
 </p>
 <p name="PyPGx.EfficientDV.call_variants_gpus">
@@ -275,8 +295,73 @@ Runs pharmacogenomics analysis on several genes.
         <i>Int </i> &mdash;
          Memory buffer allocated for each uncompression thread in calll_variants <br />
 </p>
+<p name="PyPGx.EfficientDV.v_gpu_tile_size">
+        <b>PyPGx.EfficientDV.v_gpu_tile_size</b><br />
+        <i>Int </i> &mdash;
+         Virtual GPU tile size for call_variants <br />
+</p>
+<p name="PyPGx.EfficientDV.HaplotypeSampling.input_fastq">
+        <b>PyPGx.EfficientDV.HaplotypeSampling.input_fastq</b><br />
+        <i>File? </i> &mdash;
+         Optional input FASTQ file (if not using CRAM) <br />
+</p>
+<p name="PyPGx.EfficientDV.HaplotypeSampling.kmer_length">
+        <b>PyPGx.EfficientDV.HaplotypeSampling.kmer_length</b><br />
+        <i>Int </i> &mdash;
+         K-mer length for KMC counting (default: 29) <br />
+</p>
+<p name="PyPGx.EfficientDV.HaplotypeSampling.min_kmer_count">
+        <b>PyPGx.EfficientDV.HaplotypeSampling.min_kmer_count</b><br />
+        <i>Int </i> &mdash;
+         Minimum k-mer count threshold for sampling (default: 2) <br />
+</p>
+<p name="PyPGx.EfficientDV.HaplotypeSampling.window_size">
+        <b>PyPGx.EfficientDV.HaplotypeSampling.window_size</b><br />
+        <i>Int </i> &mdash;
+         Sliding window size for seqkit (default: 50000) <br />
+</p>
+<p name="PyPGx.EfficientDV.HaplotypeSampling.step_size">
+        <b>PyPGx.EfficientDV.HaplotypeSampling.step_size</b><br />
+        <i>Int </i> &mdash;
+         Sliding window step size for seqkit (default: 50000) <br />
+</p>
+<p name="PyPGx.EfficientDV.HaplotypeSampling.minimap2_preset">
+        <b>PyPGx.EfficientDV.HaplotypeSampling.minimap2_preset</b><br />
+        <i>String </i> &mdash;
+         Minimap2 preset for alignment (default: asm5) <br />
+</p>
+<p name="PyPGx.EfficientDV.HaplotypeSampling.cram_to_fastq_cores">
+        <b>PyPGx.EfficientDV.HaplotypeSampling.cram_to_fastq_cores</b><br />
+        <i>Int </i> &mdash;
+         Number of CPU cores for CRAM to FASTQ conversion (default: 2) <br />
+</p>
+<p name="PyPGx.EfficientDV.HaplotypeSampling.kmc_mem_gb">
+        <b>PyPGx.EfficientDV.HaplotypeSampling.kmc_mem_gb</b><br />
+        <i>Int </i> &mdash;
+         Memory (GB) for KMC k-mer counting (default: 64) <br />
+</p>
+<p name="PyPGx.EfficientDV.HaplotypeSampling.kmc_cores">
+        <b>PyPGx.EfficientDV.HaplotypeSampling.kmc_cores</b><br />
+        <i>Int </i> &mdash;
+         Number of CPU cores for KMC (default: 16) <br />
+</p>
+<p name="PyPGx.EfficientDV.HaplotypeSampling.minimap_extra_args">
+        <b>PyPGx.EfficientDV.HaplotypeSampling.minimap_extra_args</b><br />
+        <i>String? </i> &mdash;
+         Additional extra arguments to pass to minimap2 (default: empty) <br />
+</p>
 
 ### Optional reference files
+<p name="PyPGx.EfficientDV.ref_gbz_for_haplotypes">
+        <b>PyPGx.EfficientDV.ref_gbz_for_haplotypes</b><br />
+        <i>File? </i> &mdash;
+         Pangenome GBZ index file for haplotype sampling (required if run_haplotype_sampling is true and pangenome_haplotypes is not provided) <br />
+</p>
+<p name="PyPGx.EfficientDV.ref_hapl">
+        <b>PyPGx.EfficientDV.ref_hapl</b><br />
+        <i>File? </i> &mdash;
+         Pre-computed haplotype index file (.hapl) for haplotype sampling (required if run_haplotype_sampling is true and pangenome_haplotypes is not provided) <br />
+</p>
 <p name="PyPGx.EfficientDV.model_serialized">
         <b>PyPGx.EfficientDV.model_serialized</b><br />
         <i>File? </i> &mdash;
@@ -286,6 +371,16 @@ Runs pharmacogenomics analysis on several genes.
         <b>PyPGx.EfficientDV.annotation_intervals</b><br />
         <i>Array[File]? </i> &mdash;
          List of bed files for VCF annotation <br />
+</p>
+<p name="PyPGx.EfficientDV.ref_dbsnp">
+        <b>PyPGx.EfficientDV.ref_dbsnp</b><br />
+        <i>File? </i> &mdash;
+         DbSNP vcf for the annotation of known variants <br />
+</p>
+<p name="PyPGx.EfficientDV.ref_dbsnp_index">
+        <b>PyPGx.EfficientDV.ref_dbsnp_index</b><br />
+        <i>File? </i> &mdash;
+         DbSNP vcf index <br />
 </p>
 </details>
 
@@ -345,6 +440,16 @@ Runs pharmacogenomics analysis on several genes.
         <b>PyPGx.read_depths</b><br />
         <i>Array[File]</i><br />
         Read depths for each gene
+</p>
+<p name="PyPGx.output_vcf">
+        <b>PyPGx.output_vcf</b><br />
+        <i>File</i><br />
+        Output VCF file (either the input VCF file or the one produced by Efficient DV if no input VCF file was provided)
+</p>
+<p name="PyPGx.output_vcf_index">
+        <b>PyPGx.output_vcf_index</b><br />
+        <i>File</i><br />
+        Output VCF index file (either the input VCF index file or the one produced by Efficient DV if no input VCF index file was provided)
 </p>
 <p name="PyPGx.results">
         <b>PyPGx.results</b><br />

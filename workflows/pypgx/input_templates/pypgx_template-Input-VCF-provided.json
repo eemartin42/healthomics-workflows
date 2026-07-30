@@ -1,0 +1,40 @@
+{
+    "PyPGx.base_file_name": "<base_file_name>",
+    "PyPGx.cram_file": "<cram_file>.cram",
+    "PyPGx.cram_index_file": "<cram_file>.cram.crai",
+    "PyPGx.gene_symbols": [
+        "ABCG2",
+        "CACNA1S",
+        "CFTR",
+        "CYP2B6",
+        "CYP2C19",
+        "CYP2C9",
+        "CYP2D6",
+        "CYP3A4",
+        "CYP3A5",
+        "CYP4F2",
+        "DPYD",
+        "G6PD",
+        "IFNL3",
+        "IFNL4",
+        "NAT2",
+        "NUDT15",
+        "RYR1",
+        "SLCO1B1",
+        "TPMT",
+        "UGT1A1",
+        "UGT2B17",
+        "VKORC1",
+        "MT-RNR1"
+    ],
+    "PyPGx.reference_genome": "hg38",
+    "PyPGx.ref_files_for_tarball": [
+        "s3://ultimagen-workflow-resources-us-east-1/hg38/v0/Homo_sapiens_assembly38.fasta",
+        "s3://ultimagen-workflow-resources-us-east-1/hg38/hg38_no_alt/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna",
+        "s3://ultimagen-workflow-resources-us-east-1/hg38/v3_hs38d1/GRCh38_GIABv3_hs38d1.fasta"
+    ],
+    "PyPGx.input_vcf_file": "<input_vcf_file>.vcf",
+    "PyPGx.input_vcf_index_file": "<input_vcf_file>.vcf.idx",
+    "PyPGx.cloud_provider_override": "aws",
+    "PyPGx.monitoring_script_input": "s3://ultimagen-workflow-resources-us-east-1/monitor_1.0.sh"
+}

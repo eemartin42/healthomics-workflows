@@ -19,20 +19,15 @@ Processes segmental duplications in the genome by collapsing all copies on a sin
         <i>File </i> &mdash;
          Input CRAM/BAM index file <br />
 </p>
-<p name="SegDupAnalysis.references">
-        <b>SegDupAnalysis.references</b><br />
-        <i>References </i> &mdash;
-         Reference genome files <br />
+<p name="SegDupAnalysis.reference_genome">
+        <b>SegDupAnalysis.reference_genome</b><br />
+        <i>String </i> &mdash;
+         Genome type selector. The workflow currently supports only hg38. <br />
 </p>
 <p name="SegDupAnalysis.n_threads">
         <b>SegDupAnalysis.n_threads</b><br />
         <i>Int </i> &mdash;
          Number of threads to use <br />
-</p>
-<p name="SegDupAnalysis.exome_intervals">
-        <b>SegDupAnalysis.exome_intervals</b><br />
-        <i>File </i> &mdash;
-         Exome intervals for variant calling (required for deepVariant, otherwise not important) <br />
 </p>
 <p name="SegDupAnalysis.dbsnp">
         <b>SegDupAnalysis.dbsnp</b><br />
@@ -66,12 +61,22 @@ Processes segmental duplications in the genome by collapsing all copies on a sin
         <i>Array[File] </i> &mdash;
          Background (normal sample) cram index files for somatic calling <br />
 </p>
+<p name="SegDupAnalysis.DV.ScatterIntervalList.convert_to_bed">
+        <b>SegDupAnalysis.DV.ScatterIntervalList.convert_to_bed</b><br />
+        <i>Boolean? </i> &mdash;
+         If true, convert interval_list files to BED format in addition to interval_list format <br />
+</p>
 
 ### Optional parameters
 <p name="SegDupAnalysis.DV.show_bg_fields">
         <b>SegDupAnalysis.DV.show_bg_fields</b><br />
         <i>Boolean </i> &mdash;
          Show background fields in the output vcf. Default: false. Mostly relevant for somatic calling. <br />
+</p>
+<p name="SegDupAnalysis.DV.run_haplotype_sampling">
+        <b>SegDupAnalysis.DV.run_haplotype_sampling</b><br />
+        <i>Boolean </i> &mdash;
+         Whether to run haplotype sampling to create pangenome haplotypes. Default: false <br />
 </p>
 <p name="SegDupAnalysis.DV.scatter_intervals_break">
         <b>SegDupAnalysis.DV.scatter_intervals_break</b><br />
@@ -81,7 +86,7 @@ Processes segmental duplications in the genome by collapsing all copies on a sin
 <p name="SegDupAnalysis.DV.intervals_string">
         <b>SegDupAnalysis.DV.intervals_string</b><br />
         <i>String? </i> &mdash;
-         Regions for variant calling, in the format chrom:start-end. Multiple regions are separated by semi-colon. hese regions. Takes precedence over target_intervals. If both are not provided then entire genome is used. <br />
+         Regions for variant calling, in the format chrom:start-end. Multiple regions are separated by semi-colon. Takes precedence over override_target_intervals. <br />
 </p>
 <p name="SegDupAnalysis.DV.min_read_count_snps">
         <b>SegDupAnalysis.DV.min_read_count_snps</b><br />
@@ -103,15 +108,10 @@ Processes segmental duplications in the genome by collapsing all copies on a sin
         <i>Int </i> &mdash;
          Minimal base quality for candidate generation <br />
 </p>
-<p name="SegDupAnalysis.DV.pileup_min_mapping_quality">
-        <b>SegDupAnalysis.DV.pileup_min_mapping_quality</b><br />
+<p name="SegDupAnalysis.DV.min_mapping_quality">
+        <b>SegDupAnalysis.DV.min_mapping_quality</b><br />
         <i>Int </i> &mdash;
-         Minimal mapping quality to be included in image (the input to the CNN) <br />
-</p>
-<p name="SegDupAnalysis.DV.candidate_min_mapping_quality">
-        <b>SegDupAnalysis.DV.candidate_min_mapping_quality</b><br />
-        <i>Int </i> &mdash;
-         Minimal mapping quality for candidate generation <br />
+         Minimum mapping quality for reads to appear in pileup images (input to CNN) and to be considered as supporting an alt-allele in candidate generation <br />
 </p>
 <p name="SegDupAnalysis.DV.min_hmer_plus_one_candidate">
         <b>SegDupAnalysis.DV.min_hmer_plus_one_candidate</b><br />
@@ -132,6 +132,21 @@ Processes segmental duplications in the genome by collapsing all copies on a sin
         <b>SegDupAnalysis.DV.prioritize_alt_supporting_reads</b><br />
         <i>Boolean </i> &mdash;
          Generate an image with all available alt-supporting reads, and only then add non-supporting reads <br />
+</p>
+<p name="SegDupAnalysis.DV.active_areas_min_base_quality">
+        <b>SegDupAnalysis.DV.active_areas_min_base_quality</b><br />
+        <i>Int </i> &mdash;
+         Minimum base quality for active areas detection <br />
+</p>
+<p name="SegDupAnalysis.DV.prioritize_high_quality_reads">
+        <b>SegDupAnalysis.DV.prioritize_high_quality_reads</b><br />
+        <i>Boolean </i> &mdash;
+         When min-mapq=0, add mapq=0 reads last, only filling remaining image capacity after high-mapq reads <br />
+</p>
+<p name="SegDupAnalysis.DV.trim_soft_clips">
+        <b>SegDupAnalysis.DV.trim_soft_clips</b><br />
+        <i>Boolean </i> &mdash;
+         Trim soft-clipped bases from pileup images <br />
 </p>
 <p name="SegDupAnalysis.DV.p_error">
         <b>SegDupAnalysis.DV.p_error</b><br />
@@ -178,6 +193,21 @@ Processes segmental duplications in the genome by collapsing all copies on a sin
         <i>File? </i> &mdash;
          Optional pangenome haplotypes cram index file <br />
 </p>
+<p name="SegDupAnalysis.DV.num_haplotypes">
+        <b>SegDupAnalysis.DV.num_haplotypes</b><br />
+        <i>Int? </i> &mdash;
+         Number of haplotypes to sample from the pangenome graph (must fit the model) <br />
+</p>
+<p name="SegDupAnalysis.DV.include_reference_in_haplotypes">
+        <b>SegDupAnalysis.DV.include_reference_in_haplotypes</b><br />
+        <i>Boolean? </i> &mdash;
+         Include the reference sequence in the sampled haplotypes (must fit the model) <br />
+</p>
+<p name="SegDupAnalysis.DV.diploid_sampling_in_haplotypes">
+        <b>SegDupAnalysis.DV.diploid_sampling_in_haplotypes</b><br />
+        <i>Boolean? </i> &mdash;
+         Use diploid sampling strategy for haplotype selection (must fit the model) <br />
+</p>
 <p name="SegDupAnalysis.DV.optimization_level">
         <b>SegDupAnalysis.DV.optimization_level</b><br />
         <i>Int? </i> &mdash;
@@ -191,12 +221,12 @@ Processes segmental duplications in the genome by collapsing all copies on a sin
 <p name="SegDupAnalysis.DV.strong_call_threshold">
         <b>SegDupAnalysis.DV.strong_call_threshold</b><br />
         <i>Float </i> &mdash;
-         Threshold for boundary call. If ensemble_size > 0 boundary calls will be re-called using ensemble inference <br />
+         Probability threshold for selective ensemble inference. When ensemble_size >= 2, examples with max probability below this threshold are re-evaluated using ensemble inference; examples above it are accepted as-is. <br />
 </p>
 <p name="SegDupAnalysis.DV.ensemble_size">
         <b>SegDupAnalysis.DV.ensemble_size</b><br />
         <i>Int </i> &mdash;
-         Size of the ensemble for inference <br />
+         Number of augmented passes for ensemble inference. Values <= 1 disable ensemble entirely (no augmentation is applied); values >= 2 enable selective ensemble. <br />
 </p>
 <p name="SegDupAnalysis.DV.ensemble_reference_rows">
         <b>SegDupAnalysis.DV.ensemble_reference_rows</b><br />
@@ -258,9 +288,9 @@ Processes segmental duplications in the genome by collapsing all copies on a sin
         <i>String? </i> &mdash;
          Flow order. If not provided, it will be extracted from the CRAM header <br />
 </p>
-<p name="SegDupAnalysis.DV.call_variants_gpu_type">
-        <b>SegDupAnalysis.DV.call_variants_gpu_type</b><br />
-        <i>String </i> &mdash;
+<p name="SegDupAnalysis.DV.call_variants_gpu_type_override">
+        <b>SegDupAnalysis.DV.call_variants_gpu_type_override</b><br />
+        <i>String? </i> &mdash;
          GPU type for call variants <br />
 </p>
 <p name="SegDupAnalysis.DV.call_variants_gpus">
@@ -283,8 +313,73 @@ Processes segmental duplications in the genome by collapsing all copies on a sin
         <i>Int </i> &mdash;
          Memory buffer allocated for each uncompression thread in calll_variants <br />
 </p>
+<p name="SegDupAnalysis.DV.v_gpu_tile_size">
+        <b>SegDupAnalysis.DV.v_gpu_tile_size</b><br />
+        <i>Int </i> &mdash;
+         Virtual GPU tile size for call_variants <br />
+</p>
+<p name="SegDupAnalysis.DV.HaplotypeSampling.input_fastq">
+        <b>SegDupAnalysis.DV.HaplotypeSampling.input_fastq</b><br />
+        <i>File? </i> &mdash;
+         Optional input FASTQ file (if not using CRAM) <br />
+</p>
+<p name="SegDupAnalysis.DV.HaplotypeSampling.kmer_length">
+        <b>SegDupAnalysis.DV.HaplotypeSampling.kmer_length</b><br />
+        <i>Int </i> &mdash;
+         K-mer length for KMC counting (default: 29) <br />
+</p>
+<p name="SegDupAnalysis.DV.HaplotypeSampling.min_kmer_count">
+        <b>SegDupAnalysis.DV.HaplotypeSampling.min_kmer_count</b><br />
+        <i>Int </i> &mdash;
+         Minimum k-mer count threshold for sampling (default: 2) <br />
+</p>
+<p name="SegDupAnalysis.DV.HaplotypeSampling.window_size">
+        <b>SegDupAnalysis.DV.HaplotypeSampling.window_size</b><br />
+        <i>Int </i> &mdash;
+         Sliding window size for seqkit (default: 50000) <br />
+</p>
+<p name="SegDupAnalysis.DV.HaplotypeSampling.step_size">
+        <b>SegDupAnalysis.DV.HaplotypeSampling.step_size</b><br />
+        <i>Int </i> &mdash;
+         Sliding window step size for seqkit (default: 50000) <br />
+</p>
+<p name="SegDupAnalysis.DV.HaplotypeSampling.minimap2_preset">
+        <b>SegDupAnalysis.DV.HaplotypeSampling.minimap2_preset</b><br />
+        <i>String </i> &mdash;
+         Minimap2 preset for alignment (default: asm5) <br />
+</p>
+<p name="SegDupAnalysis.DV.HaplotypeSampling.cram_to_fastq_cores">
+        <b>SegDupAnalysis.DV.HaplotypeSampling.cram_to_fastq_cores</b><br />
+        <i>Int </i> &mdash;
+         Number of CPU cores for CRAM to FASTQ conversion (default: 2) <br />
+</p>
+<p name="SegDupAnalysis.DV.HaplotypeSampling.kmc_mem_gb">
+        <b>SegDupAnalysis.DV.HaplotypeSampling.kmc_mem_gb</b><br />
+        <i>Int </i> &mdash;
+         Memory (GB) for KMC k-mer counting (default: 64) <br />
+</p>
+<p name="SegDupAnalysis.DV.HaplotypeSampling.kmc_cores">
+        <b>SegDupAnalysis.DV.HaplotypeSampling.kmc_cores</b><br />
+        <i>Int </i> &mdash;
+         Number of CPU cores for KMC (default: 16) <br />
+</p>
+<p name="SegDupAnalysis.DV.HaplotypeSampling.minimap_extra_args">
+        <b>SegDupAnalysis.DV.HaplotypeSampling.minimap_extra_args</b><br />
+        <i>String? </i> &mdash;
+         Additional extra arguments to pass to minimap2 (default: empty) <br />
+</p>
 
 ### Optional reference files
+<p name="SegDupAnalysis.DV.ref_gbz_for_haplotypes">
+        <b>SegDupAnalysis.DV.ref_gbz_for_haplotypes</b><br />
+        <i>File? </i> &mdash;
+         Pangenome GBZ index file for haplotype sampling (required if run_haplotype_sampling is true and pangenome_haplotypes is not provided) <br />
+</p>
+<p name="SegDupAnalysis.DV.ref_hapl">
+        <b>SegDupAnalysis.DV.ref_hapl</b><br />
+        <i>File? </i> &mdash;
+         Pre-computed haplotype index file (.hapl) for haplotype sampling (required if run_haplotype_sampling is true and pangenome_haplotypes is not provided) <br />
+</p>
 <p name="SegDupAnalysis.DV.annotation_intervals">
         <b>SegDupAnalysis.DV.annotation_intervals</b><br />
         <i>Array[File]? </i> &mdash;
@@ -309,20 +404,35 @@ Processes segmental duplications in the genome by collapsing all copies on a sin
         <i>File</i><br />
         CNV calls
 </p>
-<p name="SegDupAnalysis.acnv_calls_index">
-        <b>SegDupAnalysis.acnv_calls_index</b><br />
+<p name="SegDupAnalysis.pcnv_calls">
+        <b>SegDupAnalysis.pcnv_calls</b><br />
         <i>File</i><br />
-        CNV calls index
+        Paralog CNV calls
 </p>
 <p name="SegDupAnalysis.small_variants">
         <b>SegDupAnalysis.small_variants</b><br />
         <i>File</i><br />
-        Small variants (VCF)
+        Small variants (VCF) combining ParascopyCall output and LPA KIV-2 targeted small variants
 </p>
 <p name="SegDupAnalysis.small_variants_idx">
         <b>SegDupAnalysis.small_variants_idx</b><br />
         <i>File</i><br />
         Small variants index
+</p>
+<p name="SegDupAnalysis.lpa_vcf">
+        <b>SegDupAnalysis.lpa_vcf</b><br />
+        <i>File</i><br />
+        LPA KIV-2 targeted caller VCF (full: KIV-2 CNV symbolic record + LPA small variants)
+</p>
+<p name="SegDupAnalysis.lpa_vcf_index">
+        <b>SegDupAnalysis.lpa_vcf_index</b><br />
+        <i>File</i><br />
+        LPA KIV-2 targeted caller VCF index
+</p>
+<p name="SegDupAnalysis.lpa_json">
+        <b>SegDupAnalysis.lpa_json</b><br />
+        <i>File</i><br />
+        LPA KIV-2 targeted caller JSON report
 </p>
 
 <hr />

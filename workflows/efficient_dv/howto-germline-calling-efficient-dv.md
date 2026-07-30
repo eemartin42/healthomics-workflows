@@ -24,12 +24,12 @@ gs://gcp-public-data--broad-references/hg38/v0/wgs_calling_regions.hg38.interval
 ```
 3. A model checkpoint in ONNX format:
 ```
-gs://concordanz/deepvariant/model/germline/v1.14/germline-ramp-8128462_shuffle_300K_ckpt_260000.onnx
+gs://concordanz/deepvariant/model/germline/wgs/v2.0/ultimagen-germline-wgs-solaris2-hg38-regnet-v2.0.onnx
 ```
 
 or 
 ```
-s3://ultimagen-workflow-resources-us-east-1/deepvariant/model/germline/v1.14/germline-ramp-8128462_shuffle_300K_ckpt_260000.onnx
+s3://ultimagen-workflow-resources-us-east-1/deepvariant/model/germline/wgs/v2.0/ultimagen-germline-wgs-solaris2-hg38-regnet-v2.0.onnx
 ```
 
 **NOTE:** the exact model may differ between use-cases, we recommend consulting with the parameters templates provided to find the exact model
@@ -40,15 +40,15 @@ The Efficient DV analysis pipeline is split into two docker images:
 
 1. `make_examples` docker - contains binaries for the make_examples and post_process steps. Can be found in:
 ```
-us-central1-docker.pkg.dev/ganymede-331016/ultimagen/make_examples:3.2.1
+us-central1-docker.pkg.dev/ganymede-331016/ultimagen/make_examples:3.3.0
 or
-ultimagenomics/make_examples:3.2.1
+ultimagenomics/make_examples:3.3.0
 ```
 2. `call_variants` docker - contains binaries for the call_variants step. Can be found in:
 ```
-us-central1-docker.pkg.dev/ganymede-331016/ultimagen/call_variants:3.0.0
+us-central1-docker.pkg.dev/ganymede-331016/ultimagen/call_variants:4.1.2
 or
-ultimagenomics/call_variants:3.0.0
+ultimagenomics/call_variants:4.1.2
 ```
 
 The make_examples and post_process steps are run on a single CPU. make_examples requires up to 2 GB of memory for each thread. post_process requires 8 GB of memory and runs on a single thread.
@@ -100,10 +100,10 @@ tool \
   --cgp-min-fraction-snps 0.12 \
   --cgp-min-fraction-hmer-indels 0.12 \
   --cgp-min-fraction-non-hmer-indels 0.06 \
-  --cgp-min-mapping-quality 5 \
   --max-reads-per-region 1500 \
   --assembly-min-base-quality 0 \
   --optimal-coverages 50 \
+  --median-coverage <median_coverage> \
   --add-ins-size-channel
 ```
 
@@ -111,7 +111,7 @@ The input cram files and the corresponding index files are provided to `--input`
 
 The `--output` argument is the prefix for the output files (including tfrecords).
 
-The `--optimal-coverages` and `--add-ins-size-channel` are parameters which affect the way images are produced, and should be aligned with the model. `optimal-coverages` is related to how reads are internally downsampled before the image is produced, and `add-ins-size-channel` adds a channel with the length of the insertion.
+The `--optimal-coverages` and `--add-ins-size-channel` are parameters which affect the way images are produced, and should be aligned with the model. `optimal-coverages` is related to how reads are internally downsampled before the image is produced, and `add-ins-size-channel` adds a channel with the length of the insertion. `--median-coverage` provides `make_examples` with the actual sequencing depth of the sample, used alongside `--optimal-coverages` to control read downsampling.
 
 The program will output a sam file with the re-aligned reads unless the argument `--no-realigned-sam` is provided. Note that these files are very large, so provide a large disk space if you want to save the re-aligned reads.
 
@@ -120,22 +120,28 @@ The program will output a sam file with the re-aligned reads unless the argument
 The call_variants step combines the tfrecords from all make_examples jobs. The arguments to the call_variants step are provided as an `.ini`-formatted file. A typical file will look like:
 ```
 [RT classification]
-onnxFileName = model/germline/v1.14/germline-ramp-8128462_shuffle_300K_ckpt_260000.onnx
+onnxFileName = model/germline/wgs/v2.0/ultimagen-germline-wgs-solaris2-hg38-regnet-v2.0.onnx
+builderOptimizationLevel = 1
 useSerializedModel = 1
 trtWorkspaceSizeMB = 2000
-numInferTreadsPerGpu = 2
+numInferThreadsPerGpu = 2
 useGPUs = 1
+vGPUTileSize = 4
 gpuid = 0
 
 [debug]
 logFileFolder = .
 
 [ensemble]
-ensembleSize = 7
-randomSeed = 1000
+ensembleSize = 5
+randomSeed = 42
 referenceRows = 5
 sampleHeights = 100
 shuffleAllSamples = false
+criteria = max_prob_threshold
+threshold = 0.995
+replaceAlways = true
+enableSelectiveLogging = false
 
 [general]
 tfrecord = 1
@@ -147,19 +153,42 @@ outputFileName = call_variants
 numConversionThreads = 2
 numExampleFiles = 40
 
-exampleFile 1 = input_dir/001.tfrecord.gz
-exampleFile 2 = input_dir/002.tfrecord.gz
-exampleFile 3 = input_dir/003.tfrecord.gz
+exampleFile1 = input_dir/001.tfrecord.gz
+exampleFile2 = input_dir/002.tfrecord.gz
+exampleFile3 = input_dir/003.tfrecord.gz
 ...
 ```
 
 The last part of the `ini` file is a list with the paths to all tfrecord files, and the first `numExampleFiles` files are used.
-If `useSerializedModel` is set to 1, then the programs searches for a onnx-serialized file, with the same name as the onnx file and .serialized suffix. If the file is not found, it generates it. The serialized file can be re-used across different runs on the same platform (TRT version, GPU type etc.). The number of GPUs and the number of tfrecord.gz uncompression threads (runs on CPU) can be modified using the `useGPUs` and `numUncomprThreads` arguments, respectively.
+If `useSerializedModel` is set to 1, then the program searches for an onnx-serialized file with the same name as the onnx file and a `.serialized` suffix. If the file is not found, it generates it. The serialized file can be re-used across different runs on the same platform (TRT version, GPU type etc.). The number of GPUs and the number of tfrecord.gz uncompression threads (runs on CPU) can be modified using the `useGPUs` and `numUncomprThreads` arguments, respectively.
+
+`builderOptimizationLevel` controls the TensorRT engine-build optimization level (0–5). Higher values produce a faster inference engine at the cost of a longer build time. The workflow uses `1` for germline calling.
+
+`vGPUTileSize` is a virtual GPU tiling factor (default `1`) used by the ensemble inference scheduler. It multiplies the internal GPU slot count so that multiple inference threads can be interleaved; the physical GPU device is then selected as `gpuid / vGPUTileSize`.
 
 Once the `ini` file is ready, call_variants can be invoked from within the docker using:
 ```
-call_variants --param params.ini
+call_variants --param params.ini --fp16
 ```
+
+#### Ensemble inference
+
+The `[ensemble]` section controls selective ensemble inference, which improves variant calling accuracy by reprocessing uncertain candidates with multiple augmented passes.
+
+When `ensembleSize` is `0` or `1`, ensemble is fully disabled: each input image is inferred exactly once and no augmentation is applied. When `ensembleSize` is set to `2` or higher, a two-stage strategy is applied:
+1. **Base pass** — every image is inferred once.
+2. **Selective repass** — images whose top predicted-class probability is below `threshold` ("weak candidates") are reprocessed `ensembleSize` times, each time with a different random row-shuffle augmentation. The results are averaged to produce the final output.
+
+Images above `threshold` are "strong calls" and are not reprocessed, so the runtime overhead is proportional to the fraction of weak candidates rather than the full dataset.
+
+Key parameters:
+- `ensembleSize`: number of augmented inference passes for weak candidates. `0` or `1` disables ensemble entirely (no augmentation is applied); set to e.g. `5` to enable.
+- `threshold` (workflow parameter `strong_call_threshold`, default `0.995`): the max-class probability below which a candidate is considered weak and reprocessed.
+- `randomSeed` (workflow parameter `random_seed`, default `42`): random seed for the row-shuffle augmentation, ensuring reproducible results.
+- `referenceRows` (workflow parameter `ensemble_reference_rows`, default `5`): number of reference rows at the top of the image that are not shuffled.
+- `sampleHeights`: image height in rows per input sample. Use `100` for standard germline calling (single input CRAM). Use `100,100` when using pangenome haplotype calling (reads + haplotype CRAM).
+- `criteria`: selection criterion for identifying weak candidates. Always `max_prob_threshold` in the workflow.
+- `shuffleAllSamples` (workflow parameter `shuffle_all_samples`, default `false`): when `true`, row shuffling is applied to all samples in the image; when `false`, only the primary sample is shuffled.
 
 #### Using a serialized engine file in call_variants
 
@@ -220,11 +249,15 @@ dbSNP data can be downloaded from: gs://gcp-public-data--broad-references/hg38/v
 
 ### Workflow That Includes Haplotype Data from Pangenomes
 
-As demonstrated by [Asri et al.](https://www.biorxiv.org/content/10.1101/2025.06.05.657102v1), incorporating pangenome-derived personalized haplotype data into sequencing images can significantly improve accuracy. Haplotype information in CRAM format can be generated using the Giraffe alignment workflow described in `how-to-giraffe-alignment.md`.
+As demonstrated by [Asri et al.](https://www.biorxiv.org/content/10.1101/2025.06.05.657102v1), accuracy of variant calling can be significantly improved by using pangenome-aligned reads as input to DeepVariant, together with pangenome-derived personalized haplotype data.
 
-#### Running `make_examples` with Haplotype Data
+Pangenome-aligned reads can be generated using [`vg giraffe`](https://github.com/vgteam/vg/wiki/Mapping-short-reads-with-Giraffe). Haplotypes are sample-specific sequences selected from a pangenome graph based on the k-mer content of the input reads, and aligned to the reference genome. For detailed instructions on generating haplotypes from pangenome graphs, see [howto-haplotype-sampling.md](howto-haplotype-sampling.md).
 
-Below is the command to generate images that include haplotype data. The key differences from standard variant calling are the addition of `--exp-pangenome-haps haplotypes.cram`, `--min-mapq 1`, and `--cgp-min-mapping-quality 1`:
+*Important note:* The number of haplotypes in the image should fit the model that is being used in the call_variants step.
+
+#### Running `make_examples` with Pangenome-aligned Haplotype Data
+
+Below is the command to generate images of pangenome-aligned data that include haplotype data. The key differences from standard variant calling are the addition of `--exp-pangenome-haps haplotypes.cram` and `--min-mapq 1`:
 
 ```bash
 tool \
@@ -235,7 +268,6 @@ tool \
   --reference Homo_sapiens_assembly38.fasta \
   --min-base-quality 5 \
   --min-mapq 1 \
-  --cgp-min-mapping-quality 1 \
   --cgp-min-count-snps 2 \
   --cgp-min-count-hmer-indels 2 \
   --cgp-min-count-non-hmer-indels 2 \
@@ -248,6 +280,7 @@ tool \
   --assembly-min-base-quality 0 \
   --gvcf --p-error 0.005 \
   --optimal-coverages 50 \
+  --median-coverage <median_coverage> \
   --cycle-examples-min 100000 \
   --keep-duplicates \
   --add-ins-size-channel \
@@ -259,13 +292,13 @@ tool \
 Variant calling with haplotype data requires a specific model:
 
 ```bash
-gs://concordanz/deepvariant/model/germline/v1.15/germline-pangenome-ramp-9003772_shuffle_haplotypes_best.onnx
+gs://concordanz/deepvariant/model/germline/wgs/v2.1/ultimagen-germline-wgs-solaris2-pan-hprc-v1.0-regnet-v2.1.onnx
 ```
 
 or
 
 ```bash
-s3://ultimagen-workflow-resources-us-east-1/deepvariant/model/germline/v1.15/germline-pangenome-ramp-9003772_shuffle_haplotypes_best.onnx
+s3://ultimagen-workflow-resources-us-east-1/deepvariant/model/germline/wgs/v2.1/ultimagen-germline-wgs-solaris2-pan-hprc-v1.0-regnet-v2.1.onnx
 ```
 
 The post-processing step remains unchanged.
@@ -277,22 +310,12 @@ In case a GVCF is desired, then the commands should be modified in the following
 2. When running post_process, add the argument `--gvcf_outfile output_prefix.g.vcf.gz` and provide the `gvcf.tfrecord.gz` files as input using the `--nonvariant_site_tfrecord_path` argument. The `gvcf.tfrecord.gz` files can be provided to `--nonvariant_site_tfrecord_path` either as a comma-separated list, or a text file that contains all the paths. In the latter case use the name of the ```--nonvariant_site_tfrecord_path @gvcf_records.txt```.
 3. Optionally, use the `--gq-resolution` or `--gq-thresholds` arguments to reduce the output gvcf size, by binning intervals with similar GQ values together. `--gq-resolution` sets a constant difference between the bins, and `--gq-thresholds` accepts a list of specific bin thresholds, e.g. `--gq-thresholds 0,1,8,15,22` (the rounding is downwards). A value of 0 is special and results in a bin of 0.
 
-## Debugging tfrecords using dvtools
-The make_examples code also has a handy utility called `dvtools` to view the data in the tfrecord files. It can accept a tfrecord.gz file, and output a vcf with the records (without the images):
-```    
-docker run -v <path mapping> <docker name> \
-  dvtools --infile debug.tfrecord.gz \
-  --filetype dv --op vcf \
-  --outfile debug.dvtools.vcf
-```
+### Legacy models
 
-It can also be used to view the sequences in the image:
-```    
-docker run -v <path mapping> <docker name> \
-  dvtools --infile debug.tfrecord.gz \
-  --filetype dv --op image \
-  --outfile debug.dvtools.vcf
-```
+#### Solaris 1.0 
+The models described above apply to Solaris 2.0 data. For processing WGS Solaris 1.0 data we recommend the following changes to the workflow:
 
+1. Use the following model: `s3://ultimagen-workflow-resources-us-east-1/deepvariant/model/germline/wgs/v1.9/ultima-usb4-amp_pcrfree-germline-model-v1.9.ckpt-420000.batch1500.onnx`
+2. Set `ensembleSize` parameter to 0 or omit `[ensemble]` section from the configuration file. 
 
 

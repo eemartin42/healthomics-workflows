@@ -1,6 +1,6 @@
 {
     "TrimAlignSort.aligner": {
-        "description": "Aligner to be used. Options are: ua, ua-meth, star. Mandatory if align step is selected.",
+        "description": "Aligner to be used. Options are: ua, ua-meth, star, giraffe. Mandatory if align step is selected.",
         "optional": true
     },
     "TrimAlignSort.base_file_name": {
@@ -17,6 +17,10 @@
     },
     "TrimAlignSort.dummy_input_for_call_caching": {
         "description": "dummy_input_for_call_caching",
+        "optional": true
+    },
+    "TrimAlignSort.giraffe_parameters": {
+        "description": "Graph reference bundle for the Giraffe aligner + extra parameters for vg giraffe. Mandatory if aligner is giraffe.",
         "optional": true
     },
     "TrimAlignSort.input_cram_bam_list": {
@@ -36,12 +40,12 @@
         "optional": true
     },
     "TrimAlignSort.ref_fastas_cram": {
-        "description": "List of references for CreateReferenceCache task.",
-        "optional": false
+        "description": "List of references for CreateReferenceCache task. Optional - if not provided, cache_tarball will not be created.",
+        "optional": true
     },
-    "TrimAlignSort.references": {
-        "description": "References for merging inputs into one file, alignment, and sorting.",
-        "optional": false
+    "TrimAlignSort.reference_genome": {
+        "description": "Reference genome selector (hg38, b37, b37_ancient_dna, hg38_taps, hg38_nist_v3, hg38_nist_v3_with_decoy, hg38_no_alt, mm10, mm10_methyl, mm39, hg38_rna_seq). Defaults to hg38",
+        "optional": true
     },
     "TrimAlignSort.sorter_params": {
         "description": "Parameters for the sorter task. Mandatory if sort step is selected.",

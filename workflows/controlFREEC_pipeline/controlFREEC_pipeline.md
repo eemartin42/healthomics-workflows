@@ -29,8 +29,6 @@ The pipeline outputs:
 
 &nbsp;&nbsp;-copy-number figure  shows the copy number along the genome.
 
-<b>When Running in AWS HealthOmics this pipeline should run with</b> [static storage](https://docs.omics.ai/products/workbench/engines/parameters/aws-healthomics#storage_type-dynamic-or-static)
-
 <u>available templeates:</u>
 
 &nbsp;&nbsp;- controlFREEC_pipeline_bedGraph_input_template.json - use in case you have both .cram and _1.bedgraph input files.
@@ -147,6 +145,11 @@ The pipeline outputs:
         <i>Array[File]? </i> &mdash;
          Pre-calculated bedGraph files containing per-base coverage for the tumor sample <br />
 </p>
+<p name="SomaticCNVCallingControlFREEC.ScatterIntervalList.convert_to_bed">
+        <b>SomaticCNVCallingControlFREEC.ScatterIntervalList.convert_to_bed</b><br />
+        <i>Boolean? </i> &mdash;
+         If true, convert interval_list files to BED format in addition to interval_list format <br />
+</p>
 
 ### Optional parameters
 <p name="SomaticCNVCallingControlFREEC.mapq_override">
@@ -257,6 +260,16 @@ The pipeline outputs:
         <b>SomaticCNVCallingControlFREEC.tumor_CNVs_annotated_bed_file</b><br />
         <i>File</i><br />
         Called CNVs for tumor sample with LCR and LENGTH annotations
+</p>
+<p name="SomaticCNVCallingControlFREEC.tumor_CNVs_annotated_vcf">
+        <b>SomaticCNVCallingControlFREEC.tumor_CNVs_annotated_vcf</b><br />
+        <i>File</i><br />
+        Called CNVs for tumor sample in VCF format with annotations and filters
+</p>
+<p name="SomaticCNVCallingControlFREEC.tumor_CNVs_annotated_vcf_index">
+        <b>SomaticCNVCallingControlFREEC.tumor_CNVs_annotated_vcf_index</b><br />
+        <i>File</i><br />
+        Index file for the annotated CNVs VCF
 </p>
 <p name="SomaticCNVCallingControlFREEC.tumor_CNVs_filtered_bed_file">
         <b>SomaticCNVCallingControlFREEC.tumor_CNVs_filtered_bed_file</b><br />

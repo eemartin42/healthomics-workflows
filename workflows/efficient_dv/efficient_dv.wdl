@@ -26,29 +26,34 @@ import "tasks/structs.wdl" as Structs
 import "tasks/general_tasks.wdl" as UGGeneralTasks
 import "tasks/efficient_dv_tasks.wdl" as UGDVTasks
 import "tasks/globals.wdl" as Globals
+import "tasks/genome_resources.wdl" as GenomeResourcesLib
 import "tasks/single_sample_vc_tasks.wdl" as VCTasks
 import "tasks/vcf_postprocessing_tasks.wdl" as PostProcesTasks
+import "haplotype_sampling.wdl" as HSampling
 
 workflow EfficientDV {
   input {
     # Workflow args
-    String pipeline_version = "1.28.1" # !UnusedDeclaration
+    String pipeline_version = "1.33.0" # !UnusedDeclaration
     String base_file_name
 
     # Mandatory inputs
     Array[File] cram_files
     Array[File] cram_index_files
-    References references
+
+    # Genome resources
+    String reference_genome = "hg38"
 
     Boolean make_gvcf
     Boolean recalibrate_vaf
     Boolean is_somatic  # Enable somatic calling mode
     Boolean show_bg_fields = is_somatic # Show background fields in the output vcf
+    Boolean run_haplotype_sampling = false # Run haplotype sampling to create pangenome haplotypes
 
     # Scatter interval list args
     Int num_shards = 40
     Int scatter_intervals_break = 10000000 # Maximal resolution for scattering intervals
-    File? target_intervals
+    File? override_target_intervals  # Override default genome-specific target intervals
     String? intervals_string
 
     # Make examples args
@@ -60,12 +65,14 @@ workflow EfficientDV {
     Int min_read_count_hmer_indels = 2
     Int min_read_count_non_hmer_indels = 2
     Int min_base_quality = 5
-    Int pileup_min_mapping_quality = 5
-    Int candidate_min_mapping_quality = 5
+    Int min_mapping_quality = 5
     Int min_hmer_plus_one_candidate = 7
     Int max_reads_per_partition = 1500
     Int dbg_min_base_quality = 0 # Minimal base quality during the assembly process
     Boolean prioritize_alt_supporting_reads = false
+    Int active_areas_min_base_quality = 5
+    Boolean prioritize_high_quality_reads = true
+    Boolean trim_soft_clips = true
     Float p_error = 0.005
     Int? gq_resolution_override
     Array[Int]? gq_bins
@@ -84,6 +91,13 @@ workflow EfficientDV {
     File? pangenome_haplotypes
     File? pangenome_haplotypes_index
 
+    # Haplotype sampling parameters (required if run_haplotype_sampling is true)
+    File? ref_gbz_for_haplotypes
+    File? ref_hapl
+    Int? num_haplotypes
+    Boolean? include_reference_in_haplotypes
+    Boolean? diploid_sampling_in_haplotypes
+
     # Background files (for somatic calling)
     Array[File] background_cram_files = []
     Array[File] background_cram_index_files = []
@@ -96,7 +110,7 @@ workflow EfficientDV {
     
     # Ensemble inference args
     Float strong_call_threshold = 0.995
-    Int ensemble_size = 0 # Size of the ensemble for inference. If 0, then no ensemble inference is performed
+    Int ensemble_size = 0 # Number of augmented passes for ensemble inference. Values <= 1 disable ensemble entirely (no augmentation is applied); values >= 2 enable selective ensemble
     Int ensemble_reference_rows = 5
     Int random_seed = 42
     Boolean shuffle_all_samples = false
@@ -116,21 +130,21 @@ workflow EfficientDV {
 
     # Annotation args
     String? input_flow_order
-    File exome_intervals
     Array[File]? annotation_intervals
-    File ref_dbsnp
-    File ref_dbsnp_index
+    File? ref_dbsnp
+    File? ref_dbsnp_index
 
     # Runtime args
     Float? ug_make_examples_memory_override
     Int? ug_make_examples_cpus_override
     Int preemptible_tries = 1
     Int? ug_call_variants_extra_mem
-    String call_variants_gpu_type = "nvidia-l4" # For AWS
+    String? call_variants_gpu_type_override
     Int call_variants_gpus = 1
     Int call_variants_cpus = 8
     Int call_variants_threads = 8
     Int call_variants_uncompr_buf_size_gb = 1
+    Int v_gpu_tile_size = 4
     Boolean? no_address_override
 
     # Used for running on other clouds (aws)
@@ -153,10 +167,7 @@ workflow EfficientDV {
    #@wv cloud_provider_override == "gcp" -> suffix(cram_index_files) <= {".crai", ".bai", ".csi"}
    #@wv prefix(cram_index_files) == cram_files
    #@wv len(cram_files) >= 0
-   #@wv suffix(references['ref_fasta']) in {'.fasta', '.fa'}
-   #@wv suffix(references['ref_dict']) == '.dict'
-   #@wv suffix(references['ref_fasta_index']) == '.fai'
-   #@wv prefix(references['ref_fasta_index']) == references['ref_fasta']
+   #@wv reference_genome in {"hg38", "b37", "hg38_taps", "hg38_nist_v3", "hg38_nist_v3_with_decoy", "hg38_no_alt", "mm10", "mm39"}
    #@wv len(background_cram_files) == len(background_cram_index_files)
    #@wv cloud_provider_override == "aws" and len(background_cram_files) > 0 ->  suffix(background_cram_files) <= {".cram"}
    #@wv cloud_provider_override == "aws" and len(background_cram_files) > 0 ->  suffix(background_cram_index_files) <= {".crai", ".csi"}
@@ -168,6 +179,11 @@ workflow EfficientDV {
    #@wv defined(pangenome_haplotypes) <-> defined(pangenome_haplotypes_index)
    #@wv defined(gq_bins) -> not defined(gq_resolution_override)
    #@wv defined(gq_resolution_override) -> not defined(gq_bins)
+   #@wv run_haplotype_sampling and not defined(pangenome_haplotypes) -> defined(ref_gbz_for_haplotypes)
+   #@wv run_haplotype_sampling and not defined(pangenome_haplotypes) -> defined(ref_hapl)
+   #@wv run_haplotype_sampling and not defined(pangenome_haplotypes) -> defined(num_haplotypes)
+   #@wv run_haplotype_sampling and not defined(pangenome_haplotypes) -> defined(diploid_sampling_in_haplotypes)
+   #@wv run_haplotype_sampling and not defined(pangenome_haplotypes) -> defined(include_reference_in_haplotypes)
   }
   meta {
       description:"Performs variant calling on an input cram, using a re-write of (DeepVariant)[https://www.nature.com/articles/nbt.4235] which is adapted for Ultima Genomics data. There are three stages to the variant calling: (1) make_examples - Looks for “active regions” with potential candidates. Within these regions, it performs local assembly (haplotypes), re-aligns the reads, and defines candidate variant. Images of the reads in the vicinity of the candidates are saved as protos in a tfrecord format. (2) call_variants - Collects the images from make_examples and uses a deep learning model to infer the statistics of each variant (i.e. quality, genotype likelihoods etc.). (3) post_process - Uses the output of call_variants to generate a vcf and annotates it."
@@ -212,10 +228,15 @@ workflow EfficientDV {
       category: "input_optional"
     }
 
-    references: {
-      type: "References",
-      help: "Reference files: fasta, dict and fai, recommended value set in the template",
-      category: "ref_required"
+    reference_genome: {
+      type: "String",
+      help: "Genome selector: hg38, b37, hg38_taps, hg38_nist_v3, hg38_nist_v3_with_decoy, hg38_no_alt, mm10, mm39. Default to hg38",
+      category: "input_optional"
+    }
+    run_haplotype_sampling: {
+      type: "Boolean",
+      help: "Whether to run haplotype sampling to create pangenome haplotypes. Default: false",
+      category: "param_optional"
     }
     make_gvcf: {
       type: "Boolean",
@@ -241,9 +262,9 @@ workflow EfficientDV {
       help: "The length of the intervals for parallelization are multiples of scatter_intervals_break. This is also the maximal length of the intervals.",
       category: "param_optional"
     }
-    target_intervals: {
+    override_target_intervals: {
       type: "File",
-      help: "Limit calling to these regions. If target_intervals and intervals_string are not provided then entire genome is used.",
+      help: "Override default genome-specific target intervals. If not provided, uses genome-specific default intervals.",
       category: "param_optional"
     }
     show_bg_fields: {
@@ -252,7 +273,7 @@ workflow EfficientDV {
     }
     intervals_string: {
       type: "String",
-      help: "Regions for variant calling, in the format chrom:start-end. Multiple regions are separated by semi-colon. hese regions. Takes precedence over target_intervals. If both are not provided then entire genome is used.",
+      help: "Regions for variant calling, in the format chrom:start-end. Multiple regions are separated by semi-colon. Takes precedence over override_target_intervals.",
       category: "param_optional"
     }
     min_fraction_snps: {
@@ -294,14 +315,9 @@ workflow EfficientDV {
       help: "Minimal base quality for candidate generation",
       category: "param_optional"
     }
-    pileup_min_mapping_quality: {
+    min_mapping_quality: {
       type: "Int",
-      help: "Minimal mapping quality to be included in image (the input to the CNN)",
-      category: "param_optional"
-    }
-    candidate_min_mapping_quality: {
-      type: "Int",
-      help: "Minimal mapping quality for candidate generation",
+      help: "Minimum mapping quality for reads to appear in pileup images (input to CNN) and to be considered as supporting an alt-allele in candidate generation",
       category: "param_optional"
     }
     min_hmer_plus_one_candidate: {
@@ -321,6 +337,21 @@ workflow EfficientDV {
     prioritize_alt_supporting_reads: {
       type: "Boolean",
       help: "Generate an image with all available alt-supporting reads, and only then add non-supporting reads",
+      category: "param_optional"
+    }
+    active_areas_min_base_quality: {
+      type: "Int",
+      help: "Minimum base quality for active areas detection",
+      category: "param_optional"
+    }
+    prioritize_high_quality_reads: {
+      type: "Boolean",
+      help: "When min-mapq=0, add mapq=0 reads last, only filling remaining image capacity after high-mapq reads",
+      category: "param_optional"
+    }
+    trim_soft_clips: {
+      type: "Boolean",
+      help: "Trim soft-clipped bases from pileup images",
       category: "param_optional"
     }
     p_error: {
@@ -398,6 +429,29 @@ workflow EfficientDV {
         category: "param_optional",
         help: "Optional pangenome haplotypes cram index file"
     }
+    ref_gbz_for_haplotypes: {
+        category: "ref_optional",
+        help: "Pangenome GBZ index file for haplotype sampling (required if run_haplotype_sampling is true and pangenome_haplotypes is not provided)"
+    }
+    ref_hapl: {
+        category: "ref_optional",
+        help: "Pre-computed haplotype index file (.hapl) for haplotype sampling (required if run_haplotype_sampling is true and pangenome_haplotypes is not provided)"
+    }
+    num_haplotypes: {
+        type: "Int",
+        help: "Number of haplotypes to sample from the pangenome graph (must fit the model)",
+        category: "param_optional"
+    }
+    include_reference_in_haplotypes: {
+        type: "Boolean",
+        help: "Include the reference sequence in the sampled haplotypes (must fit the model)",
+        category: "param_optional"
+    }
+    diploid_sampling_in_haplotypes: {
+        type: "Boolean",
+        help: "Use diploid sampling strategy for haplotype selection (must fit the model)",
+        category: "param_optional"
+    }
     model_onnx: {
       help: "TensorRT model for calling variants (onnx format)",
       category: "ref_required"
@@ -454,21 +508,17 @@ workflow EfficientDV {
       help: "Flow order. If not provided, it will be extracted from the CRAM header",
       category: "param_optional"
     }
-    exome_intervals: {
-      help: "A bed file with exome intervals. Used at the post-processing step to annotate the vcf and modify the FILTER of variants in the exome.",
-      category: "ref_required"
-    }
     annotation_intervals: {
       help: "List of bed files for VCF annotation",
       category: "ref_optional"
     }
     ref_dbsnp: {
       help: "DbSNP vcf for the annotation of known variants",
-      category: "ref_required"
+      category: "ref_optional"
     }
     ref_dbsnp_index: {
       help: "DbSNP vcf index",
-      category: "ref_required"
+      category: "ref_optional"
     }
     ug_post_processing_extra_args: {
       help: "Additional arguments for post-processing",
@@ -499,11 +549,15 @@ workflow EfficientDV {
       help: "Memory buffer allocated for each uncompression thread in calll_variants",
       category: "param_optional"
     }
+    v_gpu_tile_size: {
+      help: "Virtual GPU tile size for call_variants",
+      category: "param_optional"
+    }
     ug_call_variants_extra_mem: {
       help: "Extra memory for call_variants",
       category: "param_advanced"
     }
-    call_variants_gpu_type: {
+    call_variants_gpu_type_override: {
       help: "GPU type for call variants",
       category: "param_optional"
     }
@@ -543,10 +597,6 @@ workflow EfficientDV {
     }
     call_variants_output_tfrecords: {
       help: "The tfrecords that call_variants outputs",
-      category: "output"
-    }
-    call_variants_output_tfrecords_final: {
-      help: "The final merged tfrecord that call_variants outputs",
       category: "output"
     }
     output_gvcf: {
@@ -605,25 +655,15 @@ workflow EfficientDV {
       type: "Int",
       category: "output"
     }
-    num_weak_candidates: {
-      help: "Number of weak candidates that were re-called with ensemble inference",
-      type: "Array[File]",
-      category: "output"
-    }
-    num_weak_candidates_as_int: {
-      help: "Number of weak candidates that were re-called with ensemble inference (as an integer)",
-      type: "Int",
-      category: "output"
-    }
 
     strong_call_threshold: {
       type: "Float",
-      help: "Threshold for boundary call. If ensemble_size > 0 boundary calls will be re-called using ensemble inference",
+      help: "Probability threshold for selective ensemble inference. When ensemble_size >= 2, examples with max probability below this threshold are re-evaluated using ensemble inference; examples above it are accepted as-is.",
       category: "param_optional"
     }
     ensemble_size: {
       type: "Int",
-      help: "Size of the ensemble for inference",
+      help: "Number of augmented passes for ensemble inference. Values <= 1 disable ensemble entirely (no augmentation is applied); values >= 2 enable selective ensemble.",
       category: "param_optional"
     }
     ensemble_reference_rows: {
@@ -646,23 +686,25 @@ workflow EfficientDV {
   Float ug_make_examples_memory = select_first([ug_make_examples_memory_override, 4])
   Int ug_make_examples_cpus = select_first([ug_make_examples_cpus_override, 2])
   Boolean no_address = select_first([no_address_override, true])
+  String call_variants_gpu_type = select_first([call_variants_gpu_type_override, "nvidia-t4-a10g-l4"])
 
   call Globals.Globals as Glob
   GlobalVariables global = Glob.global_dockers
 
   File monitoring_script = select_first([monitoring_script_input, global.monitoring_script])
-  if (!defined(target_intervals)){
-    call UGGeneralTasks.IntervalListOfGenome as IntervalListOfGenome{
-      input:
-        ref_fai = references.ref_fasta_index,
-        ref_dict = references.ref_dict,
-        disk_size = 1,
-        preemptible_tries = preemptible_tries,
-        docker = global.ubuntu_docker,
-        monitoring_script = monitoring_script,
-        no_address = no_address
-    }
+
+  call GenomeResourcesLib.GenomeResourcesWorkflow as GenomeResources
+
+  References references = object {
+    ref_fasta: GenomeResources.resources[reference_genome].ref_fasta,
+    ref_fasta_index: GenomeResources.resources[reference_genome].ref_fasta_index,
+    ref_dict: GenomeResources.resources[reference_genome].ref_dict
   }
+
+  File? exome_intervals = GenomeResources.resources[reference_genome].exome_intervals
+
+  # Get target intervals: use override if provided, otherwise use genome-specific default
+  File target_intervals = select_first([override_target_intervals, GenomeResources.resources[reference_genome].efficient_dv_target_intervals])
 
   if (defined(intervals_string)){
     call UGGeneralTasks.IntervalListFromString{
@@ -678,7 +720,7 @@ workflow EfficientDV {
     }
   }
 
-  File interval_list = select_first([IntervalListFromString.interval_list, IntervalListOfGenome.interval_list, target_intervals])
+  File interval_list = select_first([IntervalListFromString.interval_list, target_intervals])
 
   String output_prefix = base_file_name #basename(cram_files[0], ".cram")
 
@@ -748,6 +790,28 @@ workflow EfficientDV {
         preemptible_tries = preemptible_tries
     }
   }
+
+  if (run_haplotype_sampling && !defined(pangenome_haplotypes)) {
+      call HSampling.HaplotypeSampling as HaplotypeSampling {
+          input:
+              input_cram_bam_list = cram_files,
+              cram_reference_fasta = references.ref_fasta,
+              cram_reference_fasta_index = references.ref_fasta_index,
+              gbz_file = select_first([ref_gbz_for_haplotypes]),
+              hapl_file = select_first([ref_hapl]),
+              num_haplotypes = select_first([num_haplotypes]),
+              include_reference = select_first([include_reference_in_haplotypes]),
+              diploid_sampling =  select_first([diploid_sampling_in_haplotypes]),
+              alignment_reference_fasta = references.ref_fasta,
+              alignment_reference_fasta_index = references.ref_fasta_index,
+              sample_name = base_file_name
+      }
+  }
+
+  # Select pangenome haplotypes: use HaplotypeSampling output if generated, otherwise use input
+  File? pangenome_haplotypes_to_use = if defined(HaplotypeSampling.output_cram) then HaplotypeSampling.output_cram else pangenome_haplotypes
+  File? pangenome_haplotypes_index_to_use = if defined(HaplotypeSampling.output_cram_index) then HaplotypeSampling.output_cram_index else pangenome_haplotypes_index
+
   Int gq_resolution = select_first([gq_resolution_override, 5])
   scatter (interval in ScatterIntervalList.out){
     call UGDVTasks.UGMakeExamples {
@@ -765,10 +829,10 @@ workflow EfficientDV {
         median_coverage = CalculateCoverage.median_coverage,
         background_median_coverage = select_first([CalculateBackgroundCoverage.median_coverage, 0]),
         germline_vcf = germline_vcf,
-        pangenome_haplotypes = pangenome_haplotypes,
-        pangenome_haplotypes_index = pangenome_haplotypes_index,
+        pangenome_haplotypes = pangenome_haplotypes_to_use,
+        pangenome_haplotypes_index = pangenome_haplotypes_index_to_use,
         min_base_quality = min_base_quality,
-        pileup_min_mapping_quality = pileup_min_mapping_quality,
+        min_mapq = min_mapping_quality,
         min_read_count_snps = min_read_count_snps,
         min_read_count_hmer_indels = min_read_count_hmer_indels,
         min_read_count_non_hmer_indels = min_read_count_non_hmer_indels,
@@ -776,7 +840,6 @@ workflow EfficientDV {
         min_fraction_hmer_indels = min_fraction_hmer_indels,
         min_fraction_non_hmer_indels = min_fraction_non_hmer_indels,
         min_hmer_plus_one_candidate = min_hmer_plus_one_candidate,
-        candidate_min_mapping_quality = candidate_min_mapping_quality,
         max_reads_per_partition = max_reads_per_partition,
         assembly_min_base_quality  = dbg_min_base_quality,
         make_gvcf = make_gvcf,
@@ -789,6 +852,9 @@ workflow EfficientDV {
         add_ins_size_channel = add_ins_size_channel,
         extra_args = ug_make_examples_extra_args,
         prioritize_alt_supporting_reads = prioritize_alt_supporting_reads,
+        active_areas_min_base_quality = active_areas_min_base_quality,
+        prioritize_high_quality_reads = prioritize_high_quality_reads,
+        trim_soft_clips = trim_soft_clips,
         normalize_strand_bias = normalize_strand_bias,
         strand_bias_normalization_thresholds = strand_bias_normalization_thresholds,
         log_progress = log_make_examples_progress,
@@ -807,7 +873,7 @@ workflow EfficientDV {
 
   Array[File] examples_array = flatten(UGMakeExamples.output_examples)
 
-  call UGDVTasks.UGCallVariants as CallVariantNoEnsemble{
+  call UGDVTasks.UGCallVariants as CallVariants{
     input:
       examples = examples_array,
       model_onnx = model_onnx,
@@ -823,47 +889,13 @@ workflow EfficientDV {
       call_variants_extra_mem = ug_call_variants_extra_mem,
       optimization_level = optimization_level,
       no_address = no_address,
-      ensemble_size = 0,# no ensemble 
+      v_gpu_tile_size = v_gpu_tile_size,
+      ensemble_size = ensemble_size,
+      strong_call_threshold = strong_call_threshold,
       reference_rows = ensemble_reference_rows,
       random_seed = random_seed,
       sample_heights = if length(background_cram_files) > 0 || defined(pangenome_haplotypes) then [100, 100] else [100],
       shuffle_all_samples = shuffle_all_samples
-  }
-  
-  if (ensemble_size > 0) {
-    call UGDVTasks.UGSplitBoundaryCalls {
-      input: 
-        examples = examples_array,
-        boundary_threshold = strong_call_threshold,
-        calls    = CallVariantNoEnsemble.output_records, 
-        docker = global.ug_make_examples_docker, 
-        monitoring_script = monitoring_script,
-        no_address = no_address,
-        preemptible_tries = preemptible_tries
-    }
-
-    call UGDVTasks.UGCallVariants as CallVariantsBoundary {
-      input:
-        examples = select_first([UGSplitBoundaryCalls.boundary_examples]),
-        model_onnx = model_onnx,
-        model_serialized = model_serialized,
-        is_somatic = is_somatic,
-        docker = global.ug_call_variants_docker,
-        call_variants_uncompr_buf_size_gb = call_variants_uncompr_buf_size_gb,
-        gpu_type = call_variants_gpu_type,
-        num_gpus = call_variants_gpus,
-        num_cpus = call_variants_cpus,
-        num_threads = call_variants_threads,
-        monitoring_script = monitoring_script,
-        call_variants_extra_mem = ug_call_variants_extra_mem,
-        optimization_level = optimization_level,
-        no_address = no_address,
-        ensemble_size = ensemble_size,# ensemble on boundary records
-        reference_rows = ensemble_reference_rows,
-        random_seed = random_seed,
-        sample_heights = if length(background_cram_files) > 0 || defined(pangenome_haplotypes) then [100, 100] else [100],
-        shuffle_all_samples = shuffle_all_samples
-    }
   }
 
   if (make_gvcf){
@@ -889,14 +921,10 @@ workflow EfficientDV {
   Array[File] background_cram_files_for_post_processing = if  recalibrate_vaf then background_cram_files else []
   Array[File] background_cram_index_files_for_post_processing = if recalibrate_vaf then background_cram_index_files else []
   
-  # Use conditional logic for called_records based on ensemble_size
-  Array[File] final_called_records = if ensemble_size == 0 
-    then CallVariantNoEnsemble.output_records 
-    else flatten([select_first([UGSplitBoundaryCalls.strong_calls, []]), select_first([CallVariantsBoundary.output_records, []])])
   
   call UGDVTasks.UGPostProcessing {
     input:
-      called_records = final_called_records,
+      called_records = CallVariants.output_records,
       cram_files = cram_files_for_post_processing,
       cram_index_files = cram_index_files_for_post_processing,
       background_cram_files = background_cram_files_for_post_processing,
@@ -938,13 +966,6 @@ workflow EfficientDV {
         cpus = 4,
         preemptible_tries = preemptible_tries
     }
-  }
-
-  if (output_call_variants_tfrecords){
-    Array[File] call_variants_output_tfrecords_maybe = CallVariantNoEnsemble.output_records
-    Array[File] call_variants_output_tfrecords_final_maybe = if ensemble_size == 0 
-      then CallVariantNoEnsemble.output_records 
-      else flatten([select_first([UGSplitBoundaryCalls.strong_calls, []]), select_first([CallVariantsBoundary.output_records, []])])
   }
 
   File raw_output_vcf = UGPostProcessing.vcf_file
@@ -996,18 +1017,19 @@ workflow EfficientDV {
     File? realigned_cram_index_maybe = MergeRealignedCrams.output_cram_index
   }
 
-
+  if (output_call_variants_tfrecords) {
+    Array[File] call_variants_output_tfrecords_maybe = CallVariants.output_records
+  }
 
   output 
   {
-    File nvidia_smi_log     = CallVariantNoEnsemble.nvidia_smi_log
+    File nvidia_smi_log     = CallVariants.nvidia_smi_log
     # File output_model_serialized   = UGCallVariants.output_model_serialized # uncomment to output the serilized model
     File output_vcf         = select_first([ApplyAlleleFrequencyRatioFilter.output_vcf, raw_output_vcf])
     File output_vcf_index   = select_first([ApplyAlleleFrequencyRatioFilter.output_vcf_index, raw_output_vcf_index])
     File vcf_no_ref_calls   = RemoveRefCalls.output_vcf
     File vcf_no_ref_calls_index = RemoveRefCalls.output_vcf_index
     Array[File]? call_variants_output_tfrecords = call_variants_output_tfrecords_maybe
-    Array[File]? call_variants_output_tfrecords_final = call_variants_output_tfrecords_final_maybe
     File? output_gvcf       = gvcf_maybe
     File? output_gvcf_index = gvcf_index_maybe
     File? output_gvcf_hcr   = gvcf_hcr_maybe
@@ -1017,9 +1039,7 @@ workflow EfficientDV {
     File report_html        = QCReport.qc_report
     File qc_h5              = QCReport.qc_h5
     File qc_metrics_h5      = QCReport.qc_metrics_h5
-    Array[File] num_candidates   = CallVariantNoEnsemble.num_candidates
-    Int num_candidates_as_int    = CallVariantNoEnsemble.num_candidates_as_int
-    Array[File] num_weak_candidates = select_first([CallVariantsBoundary.num_candidates, []])
-    Int num_weak_candidates_as_int = select_first([CallVariantsBoundary.num_candidates_as_int, 0])
+    Array[File] num_candidates   = CallVariants.num_candidates
+    Int num_candidates_as_int    = CallVariants.num_candidates_as_int
   }
 }

@@ -28,10 +28,10 @@ Create simulated paired end fastq reads from Ultima single-ended CRAM or BAM.
         <i>Array[File] </i> &mdash;
          Reference fasta files for the CRAM file <br />
 </p>
-<p name="SingleCell.references">
-        <b>SingleCell.references</b><br />
-        <i>References </i> &mdash;
-         References for the workflow <br />
+<p name="SingleCell.reference_genome">
+        <b>SingleCell.reference_genome</b><br />
+        <i>String </i> &mdash;
+         Genome type selector. The workflow currently supports only hg38. <br />
 </p>
 <p name="SingleCell.insert_rg">
         <b>SingleCell.insert_rg</b><br />
@@ -114,7 +114,7 @@ Create simulated paired end fastq reads from Ultima single-ended CRAM or BAM.
 <p name="SingleCell.TrimAlignSort.aligner">
         <b>SingleCell.TrimAlignSort.aligner</b><br />
         <i>String? </i> &mdash;
-         Aligner to be used. Options are: ua, ua-meth, star. Mandatory if align step is selected. <br />
+         Aligner to be used. Options are: ua, ua-meth, star, giraffe. Mandatory if align step is selected. <br />
 </p>
 <p name="SingleCell.TrimAlignSort.ua_parameters">
         <b>SingleCell.TrimAlignSort.ua_parameters</b><br />
@@ -125,6 +125,11 @@ Create simulated paired end fastq reads from Ultima single-ended CRAM or BAM.
         <b>SingleCell.TrimAlignSort.ua_meth_parameters</b><br />
         <i>UaMethParameters? </i> &mdash;
          Parameters for the UA meth aligner. Mandatory if aligner is ua-meth. <br />
+</p>
+<p name="SingleCell.TrimAlignSort.giraffe_parameters">
+        <b>SingleCell.TrimAlignSort.giraffe_parameters</b><br />
+        <i>GiraffeParameters? </i> &mdash;
+         Graph reference bundle for the Giraffe aligner + extra parameters for vg giraffe. Mandatory if aligner is giraffe. <br />
 </p>
 <p name="SingleCell.TrimAlignSort.star_genome">
         <b>SingleCell.TrimAlignSort.star_genome</b><br />

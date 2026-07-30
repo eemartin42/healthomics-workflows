@@ -10,6 +10,7 @@ task Demux {
         File reference_fasta
         Int? mapq_override
         SorterParams sorter_params
+        File? coverage_intervals  # tar.gz file with the coverage intervals tsv pointing to the relevant coverage intervals files
         File monitoring_script
         Int cpu_input
         Int preemptible_tries
@@ -42,8 +43,8 @@ task Demux {
 
     Boolean defined_downsapling_seed = defined(sorter_params.downsample_seed)
     Boolean defined_downsapling_frac = defined(sorter_params.downsample_frac)
-    Boolean need_samtools_view = defined(mapq_override) || defined_downsapling_frac  # if filtering or downsampling is needed, samtools view is required
-
+    Boolean need_samtools_view = defined(mapq_override) || defined_downsapling_frac || defined(sorter_params.tag_filter_expression)  # if filtering or downsampling is needed, samtools view is required
+    Boolean defined_cache_tarball = defined(cache_tarball)
     command <<<
         set -xeo pipefail
         bash ~{monitoring_script} | tee monitoring.log >&2 &
@@ -53,11 +54,11 @@ task Demux {
         free -g -h -t
 
         # Open coverage intervals if given
-        file_name="~{default="" sorter_params.coverage_intervals}"
+        file_name="~{default="" coverage_intervals}"
         coverage_intervals_flag=""
         if [[ -n $file_name && -f $file_name ]]; then
             echo "Unzipping coverage intervals"
-            tar xvzf ~{sorter_params.coverage_intervals} -C .
+            tar xvzf ~{coverage_intervals} -C .
             tsv_file=$(find . -name "*.tsv")
             echo "Coverage intervals file: $tsv_file"
             coverage_intervals_flag="--intervals=$tsv_file"
@@ -70,11 +71,13 @@ task Demux {
         ln -s ~{reference_fasta} reference_folder/~{reference_fasta_base}
 
 
-        ~{"tar -zxf "+cache_tarball}
+        if [[ ~{defined_cache_tarball} == true ]]; then
+            echo "Unzipping cache tarball"
+            ~{"tar -zxf "+cache_tarball}
         
-        # for compatibility with the old image where ua was in /ua/ua and not in PATH
-        export REF_CACHE=cache/%2s/%2s/ 
-        export REF_PATH='.' 
+            export REF_CACHE=cache/%2s/%2s/
+            export REF_PATH='.'
+        fi
 
         if [[ ~{defined_downsapling_seed} == true && ~{defined_downsapling_frac} == true ]]; then
             seed_var="~{sorter_params.downsample_seed}"
@@ -90,14 +93,17 @@ task Demux {
             # build filter and/or down-sampling flags
             mapq_flag="~{true='-q ' false='' defined(mapq_override)}~{mapq_override}"
             ds_flag="~{true='-s ' false='' defined(sorter_params.downsample_frac)}${seed_var}~{default='' sorter_params.downsample_frac}"
-            VIEW_CMD="samtools view -h -@ ~{cpu_samtools} ${mapq_flag} ${ds_flag} -"
+            tag_expression="~{default='' sorter_params.tag_filter_expression}"
+            VIEW_CMD=(samtools view -h -@ ~{cpu_samtools} ${mapq_flag} ${ds_flag})
+            [[ -n "${tag_expression}" ]] && VIEW_CMD+=(-e "${tag_expression}")
+            VIEW_CMD+=(-)
         else
             # pass‑through
-            VIEW_CMD="cat"
+            VIEW_CMD=(cat)
         fi
 
-        samtools merge -@ ~{cpu_samtools} -c -O SAM - ~{sep=" " input_cram_bam_list} | \
-        ${VIEW_CMD} | \
+        samtools merge --reference reference_folder/~{reference_fasta_base} -@ ~{cpu_samtools} -c -O SAM - ~{sep=" " input_cram_bam_list} | \
+        "${VIEW_CMD[@]}" | \
         demux \
             --input=- \
             --output-dir=~{demux_output_path} \
@@ -121,12 +127,12 @@ task Demux {
         ls -R ~{demux_output_path}/
 
         echo "Extracting required memory for Sorter:"
-        awk -F, 'NR > 1 {for (i = 1; i <= NF; i++) if ($i ~ /^[0-9]+:[0-9]+$/) {split($i, parts, ":"); if (parts[1] > max) max = parts[1]}} END {print max}' ~{demux_output_path}/*region-counters.csv | tee max_region_size.txt
+        awk -F, 'NR > 1 {for (i = 1; i <= NF; i++) if ($i ~ /^[0-9]+:[0-9]+([0-9:]*)?$/) {split($i, parts, ":"); if (parts[1] > max) max = parts[1]}} END {print max}' ~{demux_output_path}/*region-counters.csv | tee max_region_size.txt
 
     >>>
     runtime {
         cpuPlatform: "Intel Skylake"
-        cpu: "~{cpu}"
+        cpu: cpu
         preemptible: preemptible_tries_final
         memory: "~{memory_gb} GiB"
         disks: "local-disk " + ceil(mapped_bam_size_local_ssd) + " LOCAL"
@@ -135,7 +141,7 @@ task Demux {
     }
     output {
         File monitoring_log = "monitoring.log"
-        Int max_region_size = read_int("max_region_size.txt")
+        Int max_region_size = ceil(read_float("max_region_size.txt"))
         Array[File] demux_output = glob("~{demux_output_path}/*.*")
         File? downsampling_seed = "downsampling_seed.txt"
     }
@@ -148,6 +154,8 @@ task Sorter {
         String base_file_name
         File reference_fasta
         SorterParams sorter_params
+        File? coverage_intervals  # tar.gz file with the coverage intervals tsv pointing to the relevant coverage intervals files
+
         File monitoring_script
 
         Int preemptible_tries
@@ -186,7 +194,7 @@ task Sorter {
     String sorter_output_path = "~{sorter_out_dir}/~{base_file_name}-~{timestamp}" 
     String reference_fasta_base = basename(reference_fasta)
     
-   
+
     # Sorter dir strucutre:
     # <sorter_out_dir>/
     #       <run_id>_<timestamp>/
@@ -212,11 +220,11 @@ task Sorter {
         ln -s ~{reference_fasta} reference_folder/~{reference_fasta_base}
 
         # Open coverage intervals if given
-        file_name="~{default="" sorter_params.coverage_intervals}"
+        file_name="~{default="" coverage_intervals}"
         coverage_intervals_flag=""
         if [[ -n $file_name && -f $file_name ]]; then
             echo "Unzipping coverage intervals"
-            tar xvzf ~{sorter_params.coverage_intervals} -C .
+            tar xvzf ~{coverage_intervals} -C .
             tsv_file=$(find . -name "*.tsv")
             echo "Coverage intervals file: $tsv_file"
             coverage_intervals_flag="--intervals=$tsv_file"
@@ -288,7 +296,7 @@ task Sorter {
     >>>
     runtime {
         cpuPlatform: "Intel Skylake"
-        cpu: "~{cpu}"
+        cpu: cpu
         preemptible: preemptible_tries_final
         memory: "~{memory_gb} GiB"
         disks: "local-disk " + ceil(mapped_bam_size_local_ssd) + " LOCAL"
@@ -366,7 +374,7 @@ task ConvertToFastq {
     >>>
     runtime {
         cpuPlatform: "Intel Skylake"
-        cpu: "~{cpu}"
+        cpu: cpu
         preemptible: preemptible_tries
         memory: "16 GiB"
         disks: "local-disk " + ceil(local_ssd_size_ask) + " LOCAL"

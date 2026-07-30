@@ -1,4 +1,52 @@
 {
+    "SegDupAnalysis.DV.HaplotypeSampling.cram_to_fastq_cores": {
+        "description": "Number of CPU cores for CRAM to FASTQ conversion (default: 2)",
+        "optional": true
+    },
+    "SegDupAnalysis.DV.HaplotypeSampling.input_fastq": {
+        "description": "Optional input FASTQ file (if not using CRAM)",
+        "optional": true
+    },
+    "SegDupAnalysis.DV.HaplotypeSampling.kmc_cores": {
+        "description": "Number of CPU cores for KMC (default: 16)",
+        "optional": true
+    },
+    "SegDupAnalysis.DV.HaplotypeSampling.kmc_mem_gb": {
+        "description": "Memory (GB) for KMC k-mer counting (default: 64)",
+        "optional": true
+    },
+    "SegDupAnalysis.DV.HaplotypeSampling.kmer_length": {
+        "description": "K-mer length for KMC counting (default: 29)",
+        "optional": true
+    },
+    "SegDupAnalysis.DV.HaplotypeSampling.min_kmer_count": {
+        "description": "Minimum k-mer count threshold for sampling (default: 2)",
+        "optional": true
+    },
+    "SegDupAnalysis.DV.HaplotypeSampling.minimap2_preset": {
+        "description": "Minimap2 preset for alignment (default: asm5)",
+        "optional": true
+    },
+    "SegDupAnalysis.DV.HaplotypeSampling.minimap_extra_args": {
+        "description": "Additional extra arguments to pass to minimap2 (default: empty)",
+        "optional": true
+    },
+    "SegDupAnalysis.DV.HaplotypeSampling.step_size": {
+        "description": "Sliding window step size for seqkit (default: 50000)",
+        "optional": true
+    },
+    "SegDupAnalysis.DV.HaplotypeSampling.window_size": {
+        "description": "Sliding window size for seqkit (default: 50000)",
+        "optional": true
+    },
+    "SegDupAnalysis.DV.ScatterIntervalList.convert_to_bed": {
+        "description": "If true, convert interval_list files to BED format in addition to interval_list format",
+        "optional": true
+    },
+    "SegDupAnalysis.DV.active_areas_min_base_quality": {
+        "description": "Minimum base quality for active areas detection",
+        "optional": true
+    },
     "SegDupAnalysis.DV.allele_frequency_ratio": {
         "description": "Minimal ratio between the allele frequency in tumor and normal for non h indels and snvs, for vcf filtering",
         "optional": true
@@ -19,7 +67,7 @@
         "description": "Number of CPUs for call_variants",
         "optional": true
     },
-    "SegDupAnalysis.DV.call_variants_gpu_type": {
+    "SegDupAnalysis.DV.call_variants_gpu_type_override": {
         "description": "GPU type for call variants",
         "optional": true
     },
@@ -35,12 +83,12 @@
         "description": "Memory buffer allocated for each uncompression thread in calll_variants",
         "optional": true
     },
-    "SegDupAnalysis.DV.candidate_min_mapping_quality": {
-        "description": "Minimal mapping quality for candidate generation",
-        "optional": true
-    },
     "SegDupAnalysis.DV.dbg_min_base_quality": {
         "description": "Minimal base quality for local assembly of haplotypes",
+        "optional": true
+    },
+    "SegDupAnalysis.DV.diploid_sampling_in_haplotypes": {
+        "description": "Use diploid sampling strategy for haplotype selection (must fit the model)",
         "optional": true
     },
     "SegDupAnalysis.DV.ensemble_reference_rows": {
@@ -48,7 +96,7 @@
         "optional": true
     },
     "SegDupAnalysis.DV.ensemble_size": {
-        "description": "Size of the ensemble for inference",
+        "description": "Number of augmented passes for ensemble inference. Values <= 1 disable ensemble entirely (no augmentation is applied); values >= 2 enable selective ensemble.",
         "optional": true
     },
     "SegDupAnalysis.DV.germline_vcf": {
@@ -75,12 +123,16 @@
         "description": "Any variant with QUAL < hard_qual_filter will be discarded from the VCF file",
         "optional": true
     },
+    "SegDupAnalysis.DV.include_reference_in_haplotypes": {
+        "description": "Include the reference sequence in the sampled haplotypes (must fit the model)",
+        "optional": true
+    },
     "SegDupAnalysis.DV.input_flow_order": {
         "description": "Flow order. If not provided, it will be extracted from the CRAM header",
         "optional": true
     },
     "SegDupAnalysis.DV.intervals_string": {
-        "description": "Regions for variant calling, in the format chrom:start-end. Multiple regions are separated by semi-colon. hese regions. Takes precedence over target_intervals. If both are not provided then entire genome is used.",
+        "description": "Regions for variant calling, in the format chrom:start-end. Multiple regions are separated by semi-colon. Takes precedence over override_target_intervals.",
         "optional": true
     },
     "SegDupAnalysis.DV.log_make_examples_progress": {
@@ -97,6 +149,10 @@
     },
     "SegDupAnalysis.DV.min_hmer_plus_one_candidate": {
         "description": "Minimal hmer length, above which more 1-bp insertion candidates are generated, provided they also meet allele frequency conditions",
+        "optional": true
+    },
+    "SegDupAnalysis.DV.min_mapping_quality": {
+        "description": "Minimum mapping quality for reads to appear in pileup images (input to CNN) and to be considered as supporting an alt-allele in candidate generation",
         "optional": true
     },
     "SegDupAnalysis.DV.min_read_count_hmer_indels": {
@@ -127,6 +183,10 @@
         "description": "Whether to disable assigning external IP addresses to VMs (relevant for Google)",
         "optional": true
     },
+    "SegDupAnalysis.DV.num_haplotypes": {
+        "description": "Number of haplotypes to sample from the pangenome graph (must fit the model)",
+        "optional": true
+    },
     "SegDupAnalysis.DV.optimization_level": {
         "description": "Optimization level for TensorRT engine in call_variants",
         "optional": true
@@ -151,16 +211,28 @@
         "description": "Optional pangenome haplotypes cram index file",
         "optional": true
     },
-    "SegDupAnalysis.DV.pileup_min_mapping_quality": {
-        "description": "Minimal mapping quality to be included in image (the input to the CNN)",
-        "optional": true
-    },
     "SegDupAnalysis.DV.prioritize_alt_supporting_reads": {
         "description": "Generate an image with all available alt-supporting reads, and only then add non-supporting reads",
         "optional": true
     },
+    "SegDupAnalysis.DV.prioritize_high_quality_reads": {
+        "description": "When min-mapq=0, add mapq=0 reads last, only filling remaining image capacity after high-mapq reads",
+        "optional": true
+    },
     "SegDupAnalysis.DV.random_seed": {
         "description": "Random seed for ensemble inference",
+        "optional": true
+    },
+    "SegDupAnalysis.DV.ref_gbz_for_haplotypes": {
+        "description": "Pangenome GBZ index file for haplotype sampling (required if run_haplotype_sampling is true and pangenome_haplotypes is not provided)",
+        "optional": true
+    },
+    "SegDupAnalysis.DV.ref_hapl": {
+        "description": "Pre-computed haplotype index file (.hapl) for haplotype sampling (required if run_haplotype_sampling is true and pangenome_haplotypes is not provided)",
+        "optional": true
+    },
+    "SegDupAnalysis.DV.run_haplotype_sampling": {
+        "description": "Whether to run haplotype sampling to create pangenome haplotypes. Default: false",
         "optional": true
     },
     "SegDupAnalysis.DV.scatter_intervals_break": {
@@ -180,7 +252,11 @@
         "optional": true
     },
     "SegDupAnalysis.DV.strong_call_threshold": {
-        "description": "Threshold for boundary call. If ensemble_size > 0 boundary calls will be re-called using ensemble inference",
+        "description": "Probability threshold for selective ensemble inference. When ensemble_size >= 2, examples with max probability below this threshold are re-evaluated using ensemble inference; examples above it are accepted as-is.",
+        "optional": true
+    },
+    "SegDupAnalysis.DV.trim_soft_clips": {
+        "description": "Trim soft-clipped bases from pileup images",
         "optional": true
     },
     "SegDupAnalysis.DV.ug_call_variants_extra_mem": {
@@ -201,6 +277,10 @@
     },
     "SegDupAnalysis.DV.ug_post_processing_extra_args": {
         "description": "Additional arguments for post-processing",
+        "optional": true
+    },
+    "SegDupAnalysis.DV.v_gpu_tile_size": {
+        "description": "Virtual GPU tile size for call_variants",
         "optional": true
     },
     "SegDupAnalysis.background_bed": {
@@ -225,10 +305,6 @@
     },
     "SegDupAnalysis.dbsnp_index": {
         "description": "dbSNP reference index file (for annotation)",
-        "optional": false
-    },
-    "SegDupAnalysis.exome_intervals": {
-        "description": "Exome intervals for variant calling (required for deepVariant, otherwise not important)",
         "optional": false
     },
     "SegDupAnalysis.homology_table": {
@@ -271,8 +347,8 @@
         "description": "Number of preemptible tries",
         "optional": true
     },
-    "SegDupAnalysis.references": {
-        "description": "Reference genome files",
+    "SegDupAnalysis.reference_genome": {
+        "description": "Genome type selector. The workflow currently supports only hg38.",
         "optional": false
     },
     "SegDupAnalysis.segdup_regions": {

@@ -6,6 +6,7 @@ struct GlobalVariables {
   String monitoring_script
   String ugbio_core_docker
   String ugbio_mrd_docker
+  String ugbio_featuremap_docker
   String mosdepth_docker
 }
 workflow Globals {
@@ -14,8 +15,9 @@ workflow Globals {
         "ubuntu_docker": "ubuntu:focal",
         "bcftools_docker": "staphb/bcftools:1.19",
         "monitoring_script": "gs://ultima-ref-files/monitor_1.0.sh",
-        "ugbio_core_docker": "ultimagenomics/ugbio_core:1.18.0",
-        "ugbio_mrd_docker": "ultimagenomics/ugbio_mrd:1.18.0",
+        "ugbio_core_docker": "ultimagenomics/ugbio_core:1.28.0",
+        "ugbio_mrd_docker": "ultimagenomics/ugbio_mrd:1.28.0",
+        "ugbio_featuremap_docker": "ultimagenomics/ugbio_featuremap:1.28.0",
         "mosdepth_docker": "brentp/mosdepth:v0.3.3"
 }
 }

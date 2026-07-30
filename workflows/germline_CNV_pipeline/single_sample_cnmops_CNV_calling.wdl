@@ -34,10 +34,10 @@ import "tasks/globals.wdl" as Globals
 workflow SingleSampleCnmopsCNVCalling {
 
     input {
-        String pipeline_version = "1.28.1" # !UnusedDeclaration
+        String pipeline_version = "1.33.0" # !UnusedDeclaration
 
         String base_file_name
-
+        String? sample_name
         File? input_bam_file
         File? input_bam_file_index
         File reference_genome      #ref-genome+idx to enable cram as input file
@@ -50,7 +50,6 @@ workflow SingleSampleCnmopsCNVCalling {
         #extenal reads count
         File? input_sample_reads_count
         Array[File]? bed_graph
-        File? genome_windows
 
         File cohort_reads_count_matrix
         File? ploidy_file
@@ -82,7 +81,6 @@ workflow SingleSampleCnmopsCNVCalling {
         #@wv suffix(reference_genome) in {'.fasta', '.fa', '.fna'}
         #@wv suffix(reference_genome_index) == '.fai'
 
-        #@wv defined(bed_graph) -> defined(genome_windows)
         #@wv defined(bed_graph) -> not(defined(input_sample_reads_count))
         #@wv defined(input_sample_reads_count) -> not(defined(bed_graph))
 
@@ -107,9 +105,14 @@ workflow SingleSampleCnmopsCNVCalling {
     }
     parameter_meta {
         base_file_name: {
-            help: "Sample name",
+            help: "Base name for the output file, if sample_name not provided - will also be the sample name in the VCF",
             type: "String",
             category: "input_required"
+        }
+        sample_name: {
+            help: "Sample name for the output VCF. if not provided, base_file_name will be used as sample name in the VCF",
+            type: "String",
+            category: "input_optional"
         }
         input_bam_file: {
             help: "Input sample BAM/CRAM file. one of the `input_bam_file`, `input_sample_reads_count` or `bed_graph` must be set",
@@ -158,11 +161,6 @@ workflow SingleSampleCnmopsCNVCalling {
         }
         bed_graph: {
             help: "Previously calculated input bedGraph files holding the coverage per base (outputs with the sequencing data).  one of the `input_bam_file`, `input_sample_reads_count` or `bed_graph` must be set",
-            type: "File",
-            category: "input_optional"
-        }
-        genome_windows: {
-            help: "Bed file of the genome binned to equal sized windows similar to the cohort_reads_count_matrix. if bed_graph input is set, this file must be given. ",
             type: "File",
             category: "input_optional"
         }
@@ -316,6 +314,18 @@ workflow SingleSampleCnmopsCNVCalling {
 
     File monitoring_script = select_first([monitoring_script_input, global.monitoring_script])    #!FileCoercion
 
+    # Always rebin cohort to match workflow window_length
+    # R script handles no-op case when cohort already at correct window size
+    call CnvTasks.RebinCohortReadsCount {
+        input:
+            cohort_reads_count_matrix = cohort_reads_count_matrix,
+            new_window_length = window_length,
+            docker = global.ugbio_cnv_docker,
+            monitoring_script = monitoring_script,
+            no_address = no_address,
+            preemptible_tries = preemptible_tries
+    }
+
     if(skip_reads_count == false) {
         File input_bam = select_first([input_bam_file])
         File input_bai = select_first([input_bam_file_index])
@@ -335,17 +345,27 @@ workflow SingleSampleCnmopsCNVCalling {
         }
     }
 
-    String sample_name = select_first([SingleSampleReadsCount.out_sample_name,base_file_name])
+    String sample_name_defined = select_first([sample_name, SingleSampleReadsCount.out_sample_name,base_file_name])
 
     if(run_convert_bedGraph_to_Granges)
     {
         Array[File] input_bed_graph = select_first([bed_graph])
-        File input_genome_windows = select_first([genome_windows])
+
+        # Extract genome windows from cohort matrix
+        call CnvTasks.ExtractGenomeWindows as ExtractGenomeWindows {
+            input:
+                cohort_reads_count_matrix = RebinCohortReadsCount.rebinned_cohort_reads_count_matrix,
+                docker = global.ugbio_cnv_docker,
+                monitoring_script = monitoring_script,
+                no_address = no_address,
+                preemptible_tries = preemptible_tries
+        }
+
         call CnvTasks.ConvertBedGraphToGranges as ConvertBedGraphToGranges{
         input:
-            sample_name = sample_name,
+            sample_name = sample_name_defined,
             input_bed_graph = input_bed_graph,
-            genome_windows = input_genome_windows,
+            genome_windows = ExtractGenomeWindows.genome_windows,
             genome_file = reference_genome_index,
             docker = global.ugbio_cnv_docker,
             monitoring_script = monitoring_script,
@@ -359,7 +379,7 @@ workflow SingleSampleCnmopsCNVCalling {
     call CnvTasks.AddCountsToCohortMatrix {
         input:
         sample_reads_count = sample_reads_count_file,
-        cohort_reads_count_matrix = cohort_reads_count_matrix,
+        cohort_reads_count_matrix = RebinCohortReadsCount.rebinned_cohort_reads_count_matrix,
         docker = global.ugbio_cnv_docker,
         save_hdf = save_hdf,
         monitoring_script = monitoring_script,
@@ -385,7 +405,7 @@ workflow SingleSampleCnmopsCNVCalling {
             parallel = parallel
     }
 
-    Array[String] sample_names = [sample_name]
+    Array[String] sample_names = [sample_name_defined]
 
     call CnvTasks.ExtractNormalizedReadCount{
         input: 
